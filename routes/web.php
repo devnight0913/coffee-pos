@@ -175,7 +175,7 @@ Route::group(['middleware' => ['auth']], function () {
 
     //API
     Route::get('/recipe/all', [\App\Http\Controllers\RecipeController::class, 'getRecipes']);
-    Route::get('/categories/all', [\App\Http\Controllers\CategoryController::class, 'getCategories']);
+    Route::get('/categories/all', [\App\Http\Controllers\InventoryController::class, 'getCategories']);
     Route::get('/items/all', [\App\Http\Controllers\ItemController::class, 'getItems']);
     Route::get('/inventory/recipe', [\App\Http\Controllers\InventoryController::class, 'getRecipes']);
     Route::get('/customers/search/all', [\App\Http\Controllers\CustomerController::class, 'search']);

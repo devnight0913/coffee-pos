@@ -1,8 +1,9 @@
 import React, { Component } from 'react';
-import { IRecipe } from '../interfaces/recipe.interface';
+import { ItemInterface } from '../interfaces/item.inteface';
+import { ICategory } from '../interfaces/category.interface';
 import 'react-toastify/dist/ReactToastify.css';
 import { ICustomer } from '../interfaces/customer.interface';
-interface ICartItem extends IRecipe {
+interface ICartItem extends ItemInterface {
     cartId: string;
     tax_rate: number | undefined;
     vat_type: string;
@@ -13,8 +14,11 @@ type Props = {
     settings: any;
 };
 type State = {
-    recipes: IRecipe[];
-    items: IRecipe[];
+    categories: ICategory[];
+    selectOption: ICategory[];
+    products: ItemInterface[];
+    showProducts: boolean;
+    categoryName: string | null;
     customers: ICustomer[];
     customer: ICustomer | undefined;
     customerName: string | null;
@@ -46,19 +50,21 @@ type State = {
 declare class PointOfSale extends Component<Props, State> {
     constructor(props: Props);
     componentDidMount(): void;
-    specialCustomerPrice: (prod: IRecipe) => number;
-    getRecipes: () => void;
+    categoryClick: (category: ICategory) => void;
+    backClick: () => void;
+    specialCustomercost: (prod: ItemInterface) => number;
+    getCategories: () => void;
     storeOrder: () => void;
     reset: () => void;
     resetPos: () => void;
     handleDiscountChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
     handleTaxChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
     handleDeliveryChargeChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-    updateItemPrice: (event: React.ChangeEvent<HTMLInputElement>, item: ICartItem) => void;
+    updateItemcost: (event: React.ChangeEvent<HTMLInputElement>, item: ICartItem) => void;
     updateItemQtyByClick: (event: any, item: ICartItem, qty: number) => void;
     toggleFullScreen: () => void;
     goToDashboard: () => void;
-    calculateItemPrice: (item: ICartItem) => number;
+    calculateItemcost: (item: ICartItem) => number;
     calculateTotal: () => void;
     getVat: () => number;
     getTaxAmount: () => number;
@@ -67,7 +73,7 @@ declare class PointOfSale extends Component<Props, State> {
     handleTenderAmountChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
     handleRemarksChange: (event: React.FormEvent<HTMLTextAreaElement>) => void;
     removeItem: (item: ICartItem) => void;
-    addToCart: (recipe: IRecipe) => void;
+    addToCart: (recipe: ItemInterface) => void;
     handleSearchSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
     handleSearchChange: (event: React.FormEvent<HTMLInputElement>) => void;
     handleVatTypeChange: (event: any) => void;
@@ -79,7 +85,7 @@ declare class PointOfSale extends Component<Props, State> {
     currencyFormatValue: (number: any) => any;
     receiptExchangeRate: () => any;
     removeCustomer(): void;
-    isProductAvailable: (product: IRecipe) => boolean;
+    isProductAvailable: (product: ItemInterface) => boolean;
     updateItemQuantity: (event: React.ChangeEvent<HTMLInputElement>, item: ICartItem) => void;
     updateItemVatType: (item: ICartItem) => void;
     updateItemVAT: (event: React.ChangeEvent<HTMLInputElement>, item: ICartItem) => void;

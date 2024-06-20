@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\CategoryResourceCollection;
 use App\Models\Recipe;
+use App\Models\Category;
+use App\Models\Supplier;
 use App\Models\Item;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -94,6 +96,21 @@ class InventoryController extends Controller
     public function getRecipes()
     {
         return Recipe::all();
+    }
+
+    public function getCategories(): JsonResponse
+    {
+        $categories = Category::with(['items' => function ($query) {
+            $query->where('is_active', 1);
+        }])->orderBy('sort_order', 'ASC')->get();
+        return response() -> json([
+            'categories' => $categories
+        ]);
+        // return $this->jsonResponse(["data" => new CategoryResourceCollection(
+        //     Category::with(['items' =>  function ($query) {
+        //         $query->active()->orderBy("created_at", "ASC");
+        //     }])->active()->orderBy("sort_order", "ASC")->latest()->get()
+        // )]);
     }
 
 }

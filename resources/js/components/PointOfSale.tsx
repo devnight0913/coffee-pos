@@ -2,6 +2,8 @@ import React, { Component } from 'react';
 import ReactDOM from 'react-dom/client';
 import Swal from 'sweetalert2';
 import { IRecipe } from '../interfaces/recipe.interface';
+import { ItemInterface } from '../interfaces/item.inteface';
+import {ICategory} from '../interfaces/category.interface';
 import httpService from '../services/http.service';
 import { currency_format, t } from '../utils';
 import { ToastContainer, toast } from 'react-toastify';
@@ -10,10 +12,10 @@ import { isFullScreen, toogleFullScreen } from '../fullscreen';
 import { ICustomer } from '../interfaces/customer.interface';
 import { Modal } from 'bootstrap';
 import uuid from 'react-uuid';
-import { XCircleIcon, Squares2X2Icon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { XCircleIcon, Squares2X2Icon, ArrowPathIcon, ArrowRightIcon, ArrowLeftIcon} from '@heroicons/react/24/outline';
 import { UserCircleIcon } from '@heroicons/react/24/solid';
 
-interface ICartItem extends IRecipe {
+interface ICartItem extends ItemInterface {
     cartId: string;
     tax_rate: number | undefined;
     vat_type: string;
@@ -26,8 +28,11 @@ type Props = {
 };
 
 type State = {
-    recipes: IRecipe[];
-    items: IRecipe[];
+    categories: ICategory[];
+    selectOption: ICategory[];
+    products: ItemInterface[];
+    showProducts: boolean;
+    categoryName: string | null;
     customers: ICustomer[];
     customer: ICustomer | undefined;
     customerName: string | null;
@@ -62,8 +67,11 @@ class PointOfSale extends Component<Props, State> {
         super(props);
 
         this.state = {
-            recipes: [],
-            items: [],
+            categories: [],
+            selectOption: [],
+            products: [],
+            showProducts: false,
+            categoryName: null,
             cart: [],
             customers: [],
             customer: undefined,
@@ -102,7 +110,7 @@ class PointOfSale extends Component<Props, State> {
         this.setState({ hasaudio: settings.newItemAudio });
         this.setState({ vatType: settings.vatType });
 
-        this.getRecipes();
+        this.getCategories();
         this.calculateTotal();
         this.setState({ tenderAmount: this.state.total });
         window.onbeforeunload = event => {
@@ -110,23 +118,34 @@ class PointOfSale extends Component<Props, State> {
         };
     }
 
-    specialCustomerPrice = (prod: IRecipe): number => {
-        if (!this.state.customer) return prod.price || 0;
-        if (this.state.customer.order_details.length == 0) return prod.price || 0;
+    categoryClick = (category: ICategory): void => {
+        this.setState({ showProducts: true });
+        this.setState({ products: category.items || [] });
+        this.setState({ categoryName: category.name });
+    };
+
+    backClick = (): void => {
+        this.setState({ showProducts: false });
+        this.setState({ products: [] });
+        this.setState({ categoryName: '' });
+    };
+
+    specialCustomercost = (prod: ItemInterface): number => {
+        if (!this.state.customer) return prod.cost || 0;
+        if (this.state.customer.order_details.length == 0) return prod.cost || 0;
         var newProd = this.state.customer.order_details.find(p => p.item_id === prod.id);
-        if (!newProd) return prod.price || 0;
+        if (!newProd) return prod.cost || 0;
         return newProd.price || 0;
     };
 
-    getRecipes = (): void => {
+    getCategories = (): void => {
         // console.log("ASDASD");
         httpService
-            .get(`recipe/all`)
+            .get(`categories/all`)
             .then((response: any) => {
-                this.setState({ recipes: response.data.data });
-                this.setState({ items: response.data.data });
-                console.log(response.data.data);
-                
+                console.log("categories", response.data.categories);
+                this.setState({categories: response.data.categories});    
+                this.setState({selectOption: response.data.categories});            
             })
             .finally(() => {
                 this.setState({ isLoadingCategories: false });
@@ -193,6 +212,7 @@ class PointOfSale extends Component<Props, State> {
 
     resetPos = (): void => {
         var settings = this.getAppSettings();
+        this.setState({ showProducts: false });
         this.setState({ cart: [] });
         this.setState({ customers: [] });
         this.setState({ customer: undefined });
@@ -244,13 +264,13 @@ class PointOfSale extends Component<Props, State> {
         });
     };
 
-    updateItemPrice = (event: React.ChangeEvent<HTMLInputElement>, item: ICartItem): void => {
+    updateItemcost = (event: React.ChangeEvent<HTMLInputElement>, item: ICartItem): void => {
         var value = event.target.value;
         let cartItems = this.state.cart;
         let _prod = this.state.cart.find(p => p.cartId === item.cartId);
         if (!_prod) return;
         if (Number(value) < 0) return;
-        _prod.price = value == '' ? undefined : Number(value);
+        _prod.cost = value == '' ? undefined : Number(value);
         this.setState({ cart: cartItems }, () => {
             this.calculateTotal();
         });
@@ -275,18 +295,18 @@ class PointOfSale extends Component<Props, State> {
         window.location.href = '/';
     };
     
-    calculateItemPrice = (item:ICartItem): number => {
-        let price = (item.price || 0) * (item.quantity || 0) * ( 100 - Number(item.discount || 0) ) / 100.0;
-        if(item.vat_type === "add") price = price + price * Number(item.tax_rate) / 100;
-        else price = price - price * Number(item.tax_rate) / 100;
-        return Number(price.toFixed(2));
+    calculateItemcost = (item:ICartItem): number => {
+        let cost = (item.cost || 0) * (item.quantity || 0) * ( 100 - Number(item.discount || 0) ) / 100.0;
+        if(item.vat_type === "add") cost = cost + cost * Number(item.tax_rate) / 100;
+        else cost = cost - cost * Number(item.tax_rate) / 100;
+        return Number(cost.toFixed(2));
     }
     calculateTotal = (): void => {
         let _total: number = 0;
         let _subtotal: number = 0;
         if (this.state.cart.length > 0) {
             this.state.cart.map((item: ICartItem) => {
-                _subtotal += this.calculateItemPrice(item);
+                _subtotal += this.calculateItemcost(item);
             });
         }
         let taxValue: number = 0;
@@ -348,25 +368,29 @@ class PointOfSale extends Component<Props, State> {
         let newCartItems = this.state.cart.filter(i => i.cartId != item.cartId);
         this.setState({ cart: newCartItems }, () => this.calculateTotal());
     };
-    addToCart = (recipe: IRecipe): void => {
+    addToCart = (recipe: ItemInterface): void => {
         let cartItem: ICartItem = {
             cartId: uuid(),
             id: recipe.id,
             name: recipe.name,
             image_path: recipe.image_path,
             description: recipe.description,
-            price: recipe.price,
+            cost: recipe.cost,
             is_active: recipe.is_active,
             vat_type: this.getAppSettings().vatType,
             tax_rate: 0,
             discount: 0,
-            quantity: 1
+            quantity: 1,
+            category_id: recipe.category_id,
+            supplier_id: recipe.supplier_id,
+            in_stock: recipe.in_stock,
+            unit: recipe.unit,
         };
         this.setState({ selectItem: "first"});
-        this.setState({ recipes: this.state.items});
         this.setState({ cart: [cartItem, ...this.state.cart] }, () => {
             this.calculateTotal();
         });
+        this.setState({categories: this.state.selectOption});
         if (this.state.hasaudio) {
             new Audio('/audio/public_audio_ding.mp3').play();
         }
@@ -378,18 +402,12 @@ class PointOfSale extends Component<Props, State> {
         if (!search) return;
         let searchValue = search.toLowerCase().trim();
         let productFound = false;
-        this.state.recipes.map((recipe: IRecipe) => {
-            let _prod;
-            _prod = (recipe.name.toLowerCase().includes(searchValue))?recipe:undefined;
+        this.state.categories.map((category: ICategory) => {
+            let _prod: ItemInterface | undefined;
+            _prod = category.items.find(
+                p => p.name.toLowerCase().includes(searchValue)
+            );
             
-            for(let i = 0;i < this.state.cart.length;i ++)
-            {
-                if(_prod !== undefined && _prod.id === this.state.cart[i].id) {
-                    _prod = undefined;
-                    break;
-                }
-            }
-
             if (_prod) {
                 this.addToCart(_prod);
                 productFound = true;
@@ -476,10 +494,10 @@ class PointOfSale extends Component<Props, State> {
     removeCustomer() {
         this.setState({ customer: undefined });
     }
-    isProductAvailable = (product: IRecipe): boolean => {
+    isProductAvailable = (product: ItemInterface): boolean => {
         // if (product.continue_selling_when_out_of_stock) return true;
-        // if (!product.track_stock) return true;
-        // if (product.in_stock > 0) return true;
+        if (!product.is_active) return true;
+        if (product.in_stock > 0) return true;
         return false;
     };
     updateItemQuantity = (event: React.ChangeEvent<HTMLInputElement>, item: ICartItem): void => {
@@ -573,9 +591,13 @@ class PointOfSale extends Component<Props, State> {
 
     handleSelectItem = (e: React.FormEvent<HTMLSelectElement>): void => {
         console.log(e.currentTarget.value);
-        let item = this.state.items.find((recipe: IRecipe) => recipe.id === e.currentTarget.value);
         this.setState({selectItem: e.currentTarget.value});
-        this.setState({recipes: item ? [item] : this.state.items});
+        let item = this.state.selectOption.find((category: ICategory) => category.id === e.currentTarget.value);
+        if(item){
+            this.categoryClick(item);
+        } else {
+            this.backClick()
+        }
     }
 
     handleCustomerNameChange = (event: React.FormEvent<HTMLInputElement>): void => {
@@ -662,7 +684,7 @@ class PointOfSale extends Component<Props, State> {
         receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">Qty</div>');
         receipt.document.write('</th>');
         receipt.document.write('<th style="font-size: 1.50rem; border: none;">');
-        receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">U Price</div>');
+        receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">U cost</div>');
         receipt.document.write('</th>');
         receipt.document.write('<th style="font-size: 1.50rem; border: none;">');
         receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">Total</div>');
@@ -675,7 +697,7 @@ class PointOfSale extends Component<Props, State> {
                 receipt.document.write(`<tr>`);
                 receipt.document.write(`<td>${detail.recipe.name}</td>`);
                 receipt.document.write(`<td>${detail.quantity}</td>`);
-                receipt.document.write(`<td>${this.currencyFormatValue(detail.price)}</td>`);
+                receipt.document.write(`<td>${this.currencyFormatValue(detail.cost)}</td>`);
                 receipt.document.write(`<td>${this.currencyFormatValue(detail.total)}</td>`);
                 receipt.document.write(`</tr>`);
             }
@@ -845,7 +867,7 @@ class PointOfSale extends Component<Props, State> {
                                                                 <div className="d-flex mb-2">
                                                                     <div className="d-flex flex-grow-1">
                                                                         <div className="me-2 d-flex align-items-center">
-                                                                            <img src={item.image_path} alt="img" className="rounded-2" height={50} />
+                                                                            <img src={item.image_path || "/images/placeholder.webp"} alt="img" className="rounded-2" height={50} />
                                                                         </div>
                                                                         <div>
                                                                             <div className="fw-bold">{item.name}</div>
@@ -853,9 +875,9 @@ class PointOfSale extends Component<Props, State> {
                                                                                 <input
                                                                                     type="number"
                                                                                     className="form-control text-center"
-                                                                                    value={item.price}
+                                                                                    value={item.cost}
                                                                                     onFocus={e => e.target.select()}
-                                                                                    onChange={e => this.updateItemPrice(e, item)}
+                                                                                    onChange={e => this.updateItemcost(e, item)}
                                                                                 />
                                                                             </div>
                                                                         </div>
@@ -898,7 +920,7 @@ class PointOfSale extends Component<Props, State> {
                                                                 />
                                                             </td>
                                                             <td width={150} className="text-center align-middle">
-                                                                {this.calculateItemPrice(item)}
+                                                                {this.calculateItemcost(item)}
                                                             </td>
                                                         </tr>
                                                     );
@@ -1037,14 +1059,33 @@ class PointOfSale extends Component<Props, State> {
                     <div className="col-md-6">
                         <div className="card w-100 card-gutter rounded-0">
                             <div className="card-header bg-white">
-                                <div className="d-flex px-4 justify-content-between" style={{ minHeight: 'calc(1.5em + 1rem + 5px)', padding: '0.5rem' }}>
-                                    <a className="text-decoration-none cursor-pointer pe-2 fs-5">
-                                        {t('COFFEES', 'قهوة')}
-                                    </a>
+                                <div className="d-flex px-4 justify-content-between align-items-center" style={{ minHeight: 'calc(1.5em + 1rem + 5px)', padding: '0.5rem' }}>
+                                    <div className='d-flex align-items-center'>
+                                        <a className="text-decoration-none cursor-pointer pe-2 fs-5" onClick={() => this.backClick()}>
+                                            {t('COFFEES', 'قهوة')}
+                                        </a>
+                                        {this.state.showProducts && (
+                                            <div className="d-flex align-items-center">
+                                                {this.getAppSettings().dir == 'rtl' ? (
+                                                    <ArrowLeftIcon className="hero-icon pe-2" />
+                                                ) : (
+                                                    <ArrowRightIcon className="hero-icon pe-2" />
+                                                )}
+                                                <span className="fw-normal text-muted pe-2 fs-5 text-uppercase" aria-current="page">
+                                                    {this.state.categoryName}
+                                                </span>
+                                                {this.getAppSettings().dir == 'rtl' ? (
+                                                    <ArrowLeftIcon className="hero-icon pe-2" />
+                                                ) : (
+                                                    <ArrowRightIcon className="hero-icon pe-2" />
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                     <select name="product" className='form-control w-50' value={this.state.selectItem} onChange={(e) => this.handleSelectItem(e)}>
                                         <option value="first">Select item</option>
-                                        {this.state.items.length > 0 && (
-                                            this.state.items.map((item: IRecipe) => (
+                                        {this.state.selectOption.length > 0 && (
+                                            this.state.selectOption.map((item: ICategory) => (
                                                 <option value={item.id}>{item.name}</option>
                                             ))
                                         )}
@@ -1063,29 +1104,28 @@ class PointOfSale extends Component<Props, State> {
                                         <div className="fw-bold h3 text-center">{t('Loading...', 'جاري التحميل...')}</div>
                                     </div>
                                 )}
+                                {!this.state.showProducts && (
                                     <React.Fragment>
-                                        {this.state.recipes.length > 0 && (
+                                        {this.state.categories.length > 0 && (
                                             <div className="row">
-                                                {this.state.recipes.map((recipe: IRecipe) => {
-                                                    if(this.state.searchValue && !recipe.name.includes(this.state.searchValue.toUpperCase()) && !recipe.name.includes(this.state.searchValue.toLowerCase())) return;
+                                                {this.state.categories.map((category: ICategory) => {
                                                     return (
-                                                        <div key={recipe.id} className="col-lg-4 col-md-4 col-sm-6 col-6 mb-0 p-0">
+                                                        <div key={category.id} className="col-lg-4 col-md-4 col-sm-6 col-6 mb-0 p-0">
                                                             <div
                                                                 className="position-relative w-100 border cursor-pointer user-select-none"
-                                                                onClick={event => this.addToCart(recipe)}>
+                                                                onClick={() => this.categoryClick(category)}>
                                                                 <picture>
-                                                                    <source type="image/jpg" srcSet={recipe.image_path} />
+                                                                    <source type="image/jpg" srcSet={category.image_path || "/images/placeholder.webp"} />
                                                                     <img
-                                                                        alt={recipe.name}
-                                                                        src={recipe.image_path}
+                                                                        alt={category.name || " " }
+                                                                        src={category.image_path || "/images/placeholder.webp"}
                                                                         aria-hidden="true"
                                                                         className="object-fit-cover h-100 w-100"
                                                                     />
                                                                 </picture>
                                                                 <div className="position-absolute bottom-0 start-0 h-100 d-flex flex-column align-items-center justify-content-center p-4 mb-0 w-100 cell-item-label text-center">
-                                                                    <div className="product-name d-flex flex-column" dir="auto">
-                                                                        <p>{recipe.name}</p>
-                                                                        <p>${recipe.price}</p>
+                                                                    <div className="product-name" dir="auto">
+                                                                        {category.name}
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -1095,6 +1135,44 @@ class PointOfSale extends Component<Props, State> {
                                             </div>
                                         )}
                                     </React.Fragment>
+                                )}
+                                {this.state.showProducts && (
+                                    <React.Fragment>
+                                        {this.state.products.length > 0 && (
+                                            <div className="row overflow-auto">
+                                                {this.state.products.map((product: ItemInterface) => {
+                                                    return (
+                                                        <>
+                                                            {this.isProductAvailable(product) && (
+                                                                <div key={product.id} className="col-lg-4 col-md-4 col-sm-6 col-6 mb-0 p-0">
+                                                                    <div
+                                                                        className="position-relative w-100 border cursor-pointer user-select-none"
+                                                                        onClick={event => this.addToCart(product)}>
+                                                                        <picture>
+                                                                            <source type="image/jpg" srcSet={product.image_path || "/images/placeholder.webp"} />
+                                                                            <img
+                                                                                alt={product.name || " "}
+                                                                                src={product.image_path || "/images/placeholder.webp"}
+                                                                                aria-hidden="true"
+                                                                                className="object-fit-cover h-100 w-100"
+                                                                            />
+                                                                        </picture>
+                                                                        <div className="position-absolute bottom-0 start-0 h-100 d-flex flex-column align-items-center justify-content-center p-4 mb-0 w-100 cell-item-label text-center">
+                                                                            <div className="fw-bold" dir="auto">
+                                                                                {product.name}
+                                                                            </div>
+                                                                            <div className="fw-normal">${ product.cost }</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </React.Fragment>
+                                )}
                             </div>
                         </div>
                     </div>

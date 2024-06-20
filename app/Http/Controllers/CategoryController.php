@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\CategoryResourceCollection;
 use App\Models\Category;
 use App\Traits\Availability;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
+use \Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 
 class CategoryController extends Controller
@@ -121,8 +123,12 @@ class CategoryController extends Controller
      * 
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getCategories()
+    public function getCategories(): JsonResponse
     {
-        return Category::all();
+        return $this->jsonResponse(["data" => new CategoryResourceCollection(
+            Category::with(['items' =>  function ($query) {
+                $query->active()->orderBy("sort_order", "ASC")->orderBy("created_at", "ASC");
+            }])->active()->orderBy("sort_order", "ASC")->latest()->get()
+        )]);
     }
 }
