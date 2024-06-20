@@ -1,0 +1,1 @@
+<div class="form-text">{{ $slot }}</div>
