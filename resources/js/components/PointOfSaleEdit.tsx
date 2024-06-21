@@ -1,7 +1,6 @@
 import React, { Component } from 'react';
 import ReactDOM from 'react-dom/client';
 import Swal from 'sweetalert2';
-import { IRecipe } from '../interfaces/recipe.interface';
 import { ItemInterface } from '../interfaces/item.inteface';
 import {ICategory} from '../interfaces/category.interface';
 import httpService from '../services/http.service';
@@ -149,6 +148,7 @@ class PointOfSaleEdit extends Component<Props, State> {
                 old_vat_type: item.vat_type,
                 old_discount: item.discount,
                 cost: item.cost,
+                price: item.price,
                 is_active: item.item.is_active,
                 category_id: item.item.category_id,
                 supplier_id: item.item.supplier_id,
@@ -434,27 +434,28 @@ class PointOfSaleEdit extends Component<Props, State> {
             this.setState({ deletedCart: [item, ...this.state.deletedCart] });
         });
     };
-    addToCart = (recipe: ItemInterface): void => {
+    addToCart = (item: ItemInterface): void => {
         let cartItem: ICartItem = {
             cartId: uuid(),
-            id: recipe.id,
-            name: recipe.name,
-            image_path: recipe.image_path,
-            description: recipe.description,
-            cost: recipe.cost,
-            is_active: recipe.is_active,
+            id: item.id,
+            name: item.name,
+            image_path: item.image_path,
+            description: item.description,
+            cost: item.cost,
+            price: item.price,
+            is_active: item.is_active,
             vat_type: this.getAppSettings().vatType,
             tax_rate: 0,
             discount: 0,
             quantity: 1,
-            category_id: recipe.category_id,
-            supplier_id: recipe.supplier_id,
-            in_stock: recipe.in_stock,
-            unit: recipe.unit,
+            category_id: item.category_id,
+            supplier_id: item.supplier_id,
+            in_stock: item.in_stock,
+            unit: item.unit,
             old_tax_rate: 0,
             old_vat_type: '',
             old_discount: 0,
-            old_quantity: 0
+            old_quantity: 0,
         };
         this.setState({ selectItem: "first"});
         this.setState({ cart: [cartItem, ...this.state.cart] }, () => {
@@ -809,7 +810,7 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                                                 <input
                                                                                     type="number"
                                                                                     className="form-control text-center"
-                                                                                    value={item.cost}
+                                                                                    value={item.price}
                                                                                     onFocus={e => e.target.select()}
                                                                                     onChange={e => this.updateItemcost(e, item)}
                                                                                 />
@@ -1095,7 +1096,7 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                                             <div className="fw-bold" dir="auto">
                                                                                 {product.name}
                                                                             </div>
-                                                                            <div className="fw-normal">${ product.cost }</div>
+                                                                            <div className="fw-normal">${ product.price }</div>
                                                                         </div>
                                                                     </div>
                                                                 </div>

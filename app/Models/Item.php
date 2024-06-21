@@ -23,6 +23,7 @@ class Item extends Model
         'name',
         'image_path',
         'cost',
+        'price',
         'in_stock',
         'description',
         'category_id',
@@ -81,7 +82,13 @@ class Item extends Model
     public function getTableViewCostAttribute(): string
     {
         $hasExchangeRate = config('settings')->enableExchangeRateForItems;
-        return currency_format($this->cost * $this->in_stock, $hasExchangeRate);
+        return currency_format($this->cost, $hasExchangeRate);
+    }
+
+    public function getTableViewPriceAttribute(): string
+    {
+        $hasExchangeRate = config('settings')->enableExchangeRateForItems;
+        return currency_format($this->price, $hasExchangeRate);
     }
     
     public function getViewInStockAttribute(): string

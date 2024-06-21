@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\View\View;
+use Log;
 
 class ItemController extends Controller
 {
@@ -66,6 +67,7 @@ class ItemController extends Controller
      */
     public function destroy(Item $item): RedirectResponse
     {
+        Log::info("delete");
         $item->delete();
         return Redirect::back()->with("success", __("Deleted"));
     }
@@ -87,10 +89,14 @@ class ItemController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        Log::info($request);
         $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'image' => ['nullable', 'mimes:jpeg,jpg,png', 'max:2024'],
             'unit' => ['required', 'numeric', 'min:1', 'max:4'],
+            'cost' => ['required', 'numeric'],
+            'price' => ['required', 'numeric'],
+            'in_stock' => ['required', 'numeric'],
             'description' => ['nullable', 'string', 'max:2000'],
             'status' => ['required', 'string'],
             'category' => ['required', 'string'],
@@ -99,8 +105,9 @@ class ItemController extends Controller
 
         $item = Item::create([
             'name' => $request->name,
-            'cost' => 0,
-            'in_stock' => 0,
+            'cost' => $request->cost,
+            'price' => $request->price,
+            'in_stock' => $request->in_stock,
             'description' => $request->description,
             'is_active' => $this->isAvailable($request->status),
             'category_id' => $request->category,
@@ -125,6 +132,9 @@ class ItemController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'image' => ['nullable', 'mimes:jpeg,jpg,png', 'max:2024'],
             'unit' => ['required', 'numeric', 'min:1', 'max:4'],
+            'cost' => ['required', 'numeric'],
+            'price' => ['required', 'numeric'],
+            'in_stock' => ['required', 'numeric'],
             'description' => ['nullable', 'string', 'max:2000'],
             'status' => ['required', 'string'],
             'category' => ['required', 'string'],
@@ -133,6 +143,9 @@ class ItemController extends Controller
 
         $item->update([
             'name' => $request->name,
+            'cost' => $request->cost,
+            'price' => $request->price,
+            'in_stock' => $request->in_stock,
             'description' => $request->description,
             'is_active' => $this->isAvailable($request->status),
             'category_id' => $request->category,
@@ -143,7 +156,8 @@ class ItemController extends Controller
         if ($request->has('image')) {
             $item->updateImage($request->image);
         }
-        return Redirect::back()->with("success", __("Updated"));
+        // return Redirect::back()->with("success", __("Updated"));
+        return Redirect::route('items.index')->with("success", __("Updated"));
     }
 
 

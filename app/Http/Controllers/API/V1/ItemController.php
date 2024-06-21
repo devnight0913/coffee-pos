@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Item;
 use Illuminate\Http\Request;
+use Log;
 
 class ItemController extends Controller
 {
@@ -34,8 +35,6 @@ class ItemController extends Controller
             ->skip($start)
             ->take($length)
             ->get();
-
-            // dd($records);
         $aaData = array();
         foreach ($records as $record) {
             $aaData[] = array(
@@ -43,6 +42,7 @@ class ItemController extends Controller
                 "name" => $record->name,
                 "image" => $record->image_url,
                 "cost" => $record->table_view_cost,
+                "price" => $record->table_view_price,
                 "in_stock" => $record->view_in_stock,
                 "description" => $record->description,
                 "is_active" => $record->is_active,

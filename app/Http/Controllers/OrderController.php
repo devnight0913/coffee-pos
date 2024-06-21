@@ -354,7 +354,7 @@ class OrderController extends Controller
             $cartItem = (object)$cartItem;
             $item = Item::where('id', $cartItem->id)->first(); // check item if valid
             $itemCost = $cartItem->cost ?? 0;
-            $itemPrice = $itemCost;
+            $itemPrice = $cartItem->price ?? 0;
             $quantity = $cartItem->quantity > 0 ? $cartItem->quantity : 0;
             $order_detail = new OrderDetail();
             $order_detail->quantity = $quantity;
@@ -477,7 +477,7 @@ class OrderController extends Controller
             //     }
                 
             $itemCost = $cartItem->cost ?? 0;
-            $itemPrice = $itemCost;
+            $itemPrice = $cartItem->price ?? 0;
             $quantity = $cartItem->quantity > 0 ? $cartItem->quantity : 0;
             $order_detail = new OrderDetail();
             $order_detail->quantity = $quantity;

@@ -47,7 +47,7 @@
                     value="{{ old('description', isset($item) ? $item->description : null) }}" />
             </x-card>
         </div>
-        <div class="col-md-6 d-flex align-items-stretch mb-3">
+        <div class="col-md-6 d-flex flex-column align-items-stretch mb-3">
             <x-card>
                 <x-select label="status.text" name="status">
                     @isset($item)
@@ -84,6 +84,13 @@
                         <option value="4">kg</option>
                     @endisset
                 </x-select>
+            </x-card>
+            <x-card class="mt-3">
+                <x-input label="Cost" name="cost" value="{{ old('cost', isset($item) ? $item->cost : '') }}" />
+                
+                <x-input label="Price" name="price" value="{{ old('price', isset($item) ? $item->price : '') }}" />
+
+                <x-input label="In_Stock" name="in_stock" value="{{ old('in_stock', isset($item) ? $item->in_stock : '') }}" />
             </x-card>
         </div>
     </div>

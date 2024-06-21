@@ -82,7 +82,7 @@ declare class PointOfSaleEdit extends Component<Props, State> {
     handleTenderAmountChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
     handleRemarksChange: (event: React.FormEvent<HTMLTextAreaElement>) => void;
     removeItem: (item: ICartItem) => void;
-    addToCart: (recipe: ItemInterface) => void;
+    addToCart: (item: ItemInterface) => void;
     handleSearchSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
     handleSearchChange: (event: React.FormEvent<HTMLInputElement>) => void;
     handleVatTypeChange: (event: any) => void;

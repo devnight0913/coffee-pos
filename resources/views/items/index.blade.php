@@ -17,9 +17,9 @@
         <x-table id="items-table">
             <x-thead>
                 <tr>
-                    <!-- <x-th>@lang('Category Name')</x-th> -->
                     <x-th>@lang('Item Name')</x-th>
                     <x-th>@lang('Cost')</x-th>
+                    <x-th>@lang('Price')</x-th>
                     <x-th>@lang('In Stock')</x-th>
                     <x-th>@lang('Description')</x-th>
                     <x-th>@lang('Category Name')</x-th>
@@ -55,6 +55,9 @@
                     },
                     {
                         data: 'cost'
+                    },
+                    {
+                        data: 'price'
                     },
                     {
                         data: 'in_stock'
@@ -93,16 +96,16 @@
                                 `<x-heroicon-o-pencil class="hero-icon-sm me-2 text-gray-400" />` +
                                 `@lang('Edit')` +
                                 `</x-dropdown-item>` +
-                                `<x-dropdown-item href="#">` +
                                 `<form action="${deleteUrl}" method="POST" id="form-${data.id}">` +
+                                `<x-dropdown-item href="#">` +
                                 `@csrf` +
                                 `@method('DELETE')` +
                                 `<button type="button" class="btn btn-link p-0 m-0 w-100 text-start text-decoration-none text-danger align-items-center btn-sm" onclick="submitDeleteForm('${data.id}')">` +
                                 `<x-heroicon-o-trash class="hero-icon-sm me-2 text-gray-400" />` +
                                 `@lang('Delete')` +
                                 `</button>` +
-                                `</form>` +
                                 `</x-dropdown-item>` +
+                                `</form>` +
                                 `</x-dropdown-menu>` +
                                 `</div>`
 

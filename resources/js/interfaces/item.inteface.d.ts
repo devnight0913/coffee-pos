@@ -6,6 +6,7 @@ export interface ItemInterface {
     name: string;
     description: string | null;
     cost: number | undefined;
+    price: number | undefined;
     in_stock: number | 0;
     unit: number | undefined;
     is_active: 1 | 0;

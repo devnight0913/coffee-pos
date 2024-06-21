@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\View\View;
+use Log;
 
 class RecipeController extends Controller
 {
@@ -63,6 +64,7 @@ class RecipeController extends Controller
      */
     public function destroy(Recipe $recipe): RedirectResponse
     {
+        Log::info("delete");
         $recipe->delete();
         return Redirect::back()->with("success", __("Deleted"));
     }
