@@ -2,18 +2,20 @@ import React, { Component } from 'react';
 import ReactDOM from 'react-dom/client';
 import Swal from 'sweetalert2';
 import { IRecipe } from '../interfaces/recipe.interface';
+import { ItemInterface } from '../interfaces/item.inteface';
+import {ICategory} from '../interfaces/category.interface';
 import httpService from '../services/http.service';
-import { currency_format, swalConfig, t } from '../utils';
+import { currency_format, t } from '../utils';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { isFullScreen, toogleFullScreen } from '../fullscreen';
 import { ICustomer } from '../interfaces/customer.interface';
 import { Modal } from 'bootstrap';
 import uuid from 'react-uuid';
+import { XCircleIcon, Squares2X2Icon, ArrowPathIcon, ArrowRightIcon, ArrowLeftIcon} from '@heroicons/react/24/outline';
 import { UserCircleIcon } from '@heroicons/react/24/solid';
-import { XCircleIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 
-interface ICartItem extends IRecipe {
+interface ICartItem extends ItemInterface {
     cartId: string;
     tax_rate: number | undefined;
     vat_type: string;
@@ -22,18 +24,22 @@ interface ICartItem extends IRecipe {
     old_tax_rate: number;
     old_vat_type: string;
     old_discount: number;
-    old_quantity: number;
+    old_quantity: number;    
 }
 
 type Props = {
-    order: string;
     settings: any;
+    order: any;
 };
 
 type State = {
     orderId: string;
     orderNumber: string;
-    recipes: IRecipe[];
+    categories: ICategory[];
+    selectOption: ICategory[];
+    products: ItemInterface[];
+    showProducts: boolean;
+    categoryName: string | null;
     customers: ICustomer[];
     customer: ICustomer | undefined;
     customerName: string | null;
@@ -45,22 +51,22 @@ type State = {
     customerFloor: string | null;
     customerApartment: string | null;
     cart: ICartItem[];
-    deletedRecipes: ICartItem[];
-    showRecipes: boolean;
-    categoryName: string | null;
     total: number;
     subtotal: number;
     tax: number | undefined;
     vatType: string;
     deliveryCharge: number | undefined;
     discount: number | undefined;
+    hasaudio: boolean | undefined;
     tenderAmount: number | undefined;
     searchValue: string | null;
     remarks: string | null;
+    orderType: string;
     isFullScreen: boolean;
     isLoading: boolean;
     isLoadingCategories: boolean;
     isPaid: boolean;
+    selectItem: string;
 };
 
 class PointOfSaleEdit extends Component<Props, State> {
@@ -70,9 +76,12 @@ class PointOfSaleEdit extends Component<Props, State> {
         this.state = {
             orderId: '',
             orderNumber: '',
-            recipes: [],
+            categories: [],
+            selectOption: [],
+            products: [],
+            showProducts: false,
+            categoryName: null,
             cart: [],
-            deletedRecipes: [],
             customers: [],
             customer: undefined,
             customerName: null,
@@ -83,13 +92,13 @@ class PointOfSaleEdit extends Component<Props, State> {
             customerStreet: null,
             customerFloor: null,
             customerApartment: null,
-            showRecipes: false,
-            categoryName: null,
+            orderType: 'takeout',
             subtotal: 0,
             total: 0,
             tax: 0,
             vatType: this.getAppSettings().vatType,
             deliveryCharge: 0,
+            hasaudio: true,
             discount: 0,
             searchValue: null,
             remarks: null,
@@ -98,20 +107,17 @@ class PointOfSaleEdit extends Component<Props, State> {
             isLoading: false,
             isLoadingCategories: true,
             isPaid: true,
+            selectItem: "first",
         };
     }
-
-    getAppSettings = (): any => {
-        return JSON.parse(this.props.settings);
-    };
-
     componentDidMount() {
         this.setupForEditing().then(() => {
             this.calculateTotal();
         });
-        this.getRecipes();
+        var settings = this.getAppSettings();
+        this.setState({ hasaudio: settings.newItemAudio });
+        this.getCategories();
     }
-
     setupForEditing = async (): Promise<void> => {
         var order = JSON.parse(this.props.order);
         console.log(order);
@@ -128,10 +134,10 @@ class PointOfSaleEdit extends Component<Props, State> {
         order.order_details.map((item: any) => {
             let cartItem: ICartItem = {
                 cartId: uuid(),
-                id: item.recipe.id,
-                name: item.recipe.name,
-                image_path: item.recipe.image_path,
-                description: item.recipe.description,
+                id: item.item.id,
+                name: item.item.name,
+                image_path: item.item.image_path,
+                description: item.item.description,
                 quantity: item.quantity,
                 old_quantity: item.quantity,
                 tax_rate: item.tax_rate,
@@ -140,8 +146,12 @@ class PointOfSaleEdit extends Component<Props, State> {
                 old_tax_rate: item.tax_rate,
                 old_vat_type: item.vat_type,
                 old_discount: item.discount,
-                price: item.price,
-                is_active: item.recipe.is_active,
+                cost: item.cost,
+                is_active: item.item.is_active,
+                category_id: item.item.category_id,
+                supplier_id: item.item.supplier_id,
+                in_stock: item.item.in_stock,
+                unit: item.item.unit,
             };
             cartItems.push(cartItem);
         });
@@ -162,119 +172,122 @@ class PointOfSaleEdit extends Component<Props, State> {
         this.setState({ remarks: order.remarks });
     };
 
-    randomString = (): string => {
-        return (Math.random() + 1).toString(36).substring(2);
+    categoryClick = (category: ICategory): void => {
+        this.setState({ showProducts: true });
+        this.setState({ products: category.items || [] });
+        this.setState({ categoryName: category.name });
     };
 
-    getRecipes = (): void => {
+    backClick = (): void => {
+        this.setState({ showProducts: false });
+        this.setState({ products: [] });
+        this.setState({ categoryName: '' });
+    };
+
+    specialCustomercost = (prod: ItemInterface): number => {
+        if (!this.state.customer) return prod.cost || 0;
+        if (this.state.customer.order_details.length == 0) return prod.cost || 0;
+        var newProd = this.state.customer.order_details.find(p => p.item_id === prod.id);
+        if (!newProd) return prod.cost || 0;
+        return newProd.price || 0;
+    };
+
+    getCategories = (): void => {
         // console.log("ASDASD");
         httpService
-            .get(`/recipe/all`)
+            .get(`categories/all`)
             .then((response: any) => {
-                this.setState({ recipes: response.data.data });
+                console.log("categories", response.data.categories);
+                this.setState({categories: response.data.categories});    
+                this.setState({selectOption: response.data.categories});            
             })
             .finally(() => {
                 this.setState({ isLoadingCategories: false });
             });
     };
 
-    updateOrder = (): void => {
+    storeOrder = (): void => {
         if (this.state.cart.length == 0) {
             toast.error(t('No items has been added!', 'لم يتم إضافة اية اصناف!'));
             return;
         }
+
         this.setState({ isLoading: true });
+        var _deliveryCharge = 0;
+        if (this.getAppSettings().enableTakeoutAndDelivery) {
+            _deliveryCharge = this.isOrderDelivery() ? this.state.deliveryCharge || 0 : 0;
+        } else {
+            _deliveryCharge = this.state.deliveryCharge || 0;
+        }
         httpService
-            .post(`/orders/update/${this.state.orderId}`, {
+            .post(`/order`, {
                 customer: this.state.customer,
                 cart: this.state.cart,
-                deletedRecipes: this.state.deletedRecipes,
                 subtotal: this.state.subtotal,
                 total: this.state.total,
                 tax_rate: this.state.tax || 0,
                 vat_type: this.state.vatType,
-                delivery_charge: this.state.deliveryCharge || 0,
+                delivery_charge: _deliveryCharge,
                 discount: this.state.discount || 0,
                 remarks: this.state.remarks,
+                type: this.state.orderType,
                 tender_amount: this.state.tenderAmount || 0,
-                paid: this.state.isPaid,
-                _method: 'PUT'
+                paid: this.state.isPaid
             })
             .then((response: any) => {
                 if (response.data) {
+                    this.resetPos();
+                    toast.info(t('Saved!', 'تم الحفظ'));
                     this.closeModal('checkoutModal');
-                    Swal.fire({
-                        title: t('Updated', 'تم التحديث'),
-                        text: t('Invoice has been updated!', '"تم تحديث الفاتورة!"'),
-                        icon: 'success',
-                        allowOutsideClick: false,
-                        confirmButtonText: t('Continue', 'المتابعة')
-                    }).then(result => {
-                        if (result.isConfirmed) {
-                            window.location.href = `/orders/${this.state.orderId}`;
-                        }
-                    });
+                    console.log(response.data);
+                    this.printInvoice(response.data, this.getAppSettings());
                 }
             })
-            .finally(() => this.setState({ isLoading: false }));
-    };
-
-    toggleFullScreen = (): void => {
-        toogleFullScreen();
-        this.setState({ isFullScreen: !this.state.isFullScreen });
-    };
-    goToOrderList = (): void => {
-        window.location.href = '/orders';
-    };
-    
-    calculateItemPrice = (item:ICartItem): number => {
-        let price = (item.price || 0) * (item.quantity || 0) * ( 100 - Number(item.discount || 0) ) / 100.0;
-        if(item.vat_type === "add") price = price + price * Number(item.tax_rate) / 100;
-        else price = price - price * Number(item.tax_rate) / 100;
-        return Number(price.toFixed(2));
-    }
-    
-    calculateTotal = (): void => {
-        let _total: number = 0;
-        let _subtotal: number = 0;
-        if (this.state.cart.length > 0) {
-            this.state.cart.map((item: ICartItem) => {
-                _subtotal += this.calculateItemPrice(item);
+            .finally(() => {
+                this.setState({ isLoading: false });
             });
-        }
-        let taxValue: number = 0;
-        if (this.state.vatType == 'add') {
-            if ((this.state.tax || 0) > 0 && (this.state.tax || 0) <= 100) {
-                taxValue = (Number(this.state.tax || 0) * Number(_subtotal)) / 100;
+    };
+    reset = (): void => {
+        Swal.fire({
+            title: t('Reset?', 'إعادة ضبط'),
+            text: t('Any unsaved changes will be lost', 'ستفقد أي تغييرات غير محفوظة'),
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: t('Reset?', 'إعادة ضبط'),
+            cancelButtonText: t('Cancel', 'إلغاء')
+        }).then(result => {
+            if (result.isConfirmed) {
+                this.resetPos();
             }
-        }
-        _total = Number(_subtotal) * ( 100 - Number(this.state.discount || 0) ) / 100.0 + Number(taxValue) + Number(this.state.deliveryCharge || 0);
-        this.setState({ subtotal: _subtotal });
-        this.setState({ total: _total });
-        this.setState({ tenderAmount: _total });
+        });
     };
 
-    getVat = (): number => {
-        var vat = this.state.tax || 0;
-        if (vat <= 0) return 0;
-        var grossAmount = this.state.subtotal || 0;
-        var taxAmount = this.getTaxAmount();
-        return Math.round(Number(grossAmount) - Number(taxAmount));
-    };
-
-    getTaxAmount = (): number => {
-        var vat = this.state.tax || 0;
-        if (vat <= 0) return 0;
-        var grossAmount = this.state.subtotal || 0;
-        return Math.trunc(Number(grossAmount) / Number(Number(1) + Number(vat) / Number(100)));
-    };
-
-    getTotalTax = (): number => {
-        let taxValue: number = 0;
-        if (Number(this.state.tax || 0) > 0 && Number(this.state.tax || 0) <= 100) {
-            taxValue = (Number(this.state.tax || 0) * Number(this.state.subtotal)) / 100;
-        }
-        return Number(taxValue);
+    resetPos = (): void => {
+        var settings = this.getAppSettings();
+        this.setState({ showProducts: false });
+        this.setState({ cart: [] });
+        this.setState({ customers: [] });
+        this.setState({ customer: undefined });
+        this.setState({ customerName: null });
+        this.setState({ customerEmail: null });
+        this.setState({ customerMobile: null });
+        this.setState({ customerCity: null });
+        this.setState({ customerBuilding: null });
+        this.setState({ customerStreet: null });
+        this.setState({ customerFloor: null });
+        this.setState({ customerApartment: null });
+        this.setState({ subtotal: 0 });
+        this.setState({ deliveryCharge: settings.deliveryCharge });
+        this.setState({ total: 0 });
+        this.setState({ discount: settings.discount });
+        this.setState({ tax: settings.taxRate });
+        this.setState({ vatType: settings.vatType });
+        this.setState({ searchValue: null });
+        this.setState({ remarks: null });
+        this.setState({ tenderAmount: 0 });
+        this.setState({ isLoading: false });
+        this.setState({ isPaid: true });
+        this.setState({ selectItem: "first" });
     };
 
     handleDiscountChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
@@ -303,6 +316,246 @@ class PointOfSaleEdit extends Component<Props, State> {
         });
     };
 
+    updateItemcost = (event: React.ChangeEvent<HTMLInputElement>, item: ICartItem): void => {
+        var value = event.target.value;
+        let cartItems = this.state.cart;
+        let _prod = this.state.cart.find(p => p.cartId === item.cartId);
+        if (!_prod) return;
+        if (Number(value) < 0) return;
+        _prod.cost = value == '' ? undefined : Number(value);
+        this.setState({ cart: cartItems }, () => {
+            this.calculateTotal();
+        });
+    };
+    updateItemQtyByClick = (event: any, item: ICartItem, qty: number): void => {
+        var value = qty;
+        let cartItems = this.state.cart;
+        let _prod = this.state.cart.find(p => p.cartId === item.cartId);
+        if (!_prod) return;
+        if (Number(value) < 0) return;
+        _prod.quantity = Number(value) || 1;
+        this.setState({ cart: cartItems }, () => {
+            this.calculateTotal();
+        });
+    };
+
+    toggleFullScreen = (): void => {
+        toogleFullScreen();
+        this.setState({ isFullScreen: !this.state.isFullScreen });
+    };
+    goToOrderList = (): void => {
+        window.location.href = '/orders';
+    };
+    
+    calculateItemcost = (item:ICartItem): number => {
+        let cost = (item.cost || 0) * (item.quantity || 0) * ( 100 - Number(item.discount || 0) ) / 100.0;
+        if(item.vat_type === "add") cost = cost + cost * Number(item.tax_rate) / 100;
+        else cost = cost - cost * Number(item.tax_rate) / 100;
+        return Number(cost.toFixed(2));
+    }
+    calculateTotal = (): void => {
+        let _total: number = 0;
+        let _subtotal: number = 0;
+        if (this.state.cart.length > 0) {
+            this.state.cart.map((item: ICartItem) => {
+                _subtotal += this.calculateItemcost(item);
+            });
+        }
+        let taxValue: number = 0;
+        if (this.state.vatType == 'add') {
+            if ((this.state.tax || 0) > 0 && (this.state.tax || 0) <= 100) {
+                taxValue = (Number(this.state.tax || 0) * Number(_subtotal)) / 100;
+            }
+        }
+        var deliveryCharge: number = 0;
+        if (this.getAppSettings().enableTakeoutAndDelivery) {
+            if (this.isOrderDelivery()) {
+                deliveryCharge = Number(this.state.deliveryCharge || 0);
+            }
+        } else {
+            deliveryCharge = Number(this.state.deliveryCharge || 0);
+        }
+
+        _total = Number(_subtotal) * ( 100 - Number(this.state.discount || 0) ) / 100.0 + Number(taxValue) + Number(deliveryCharge);
+        this.setState({ subtotal: _subtotal });
+        this.setState({ total: _total });
+        this.setState({ tenderAmount: _total });
+    };
+
+    getVat = (): number => {
+        var vat = this.state.tax || 0;
+        if (vat <= 0) return 0;
+        var grossAmount = this.state.subtotal || 0;
+        var taxAmount = this.getTaxAmount();
+        return Math.round(Number(grossAmount) - Number(taxAmount));
+    };
+
+    getTaxAmount = (): number => {
+        var vat = this.state.tax || 0;
+        if (vat <= 0) return 0;
+        var grossAmount = this.state.subtotal || 0;
+        return Math.trunc(Number(grossAmount) / Number(Number(1) + Number(vat) / Number(100)));
+    };
+
+    getTotalTax = (): number => {
+        let taxValue: number = 0;
+        if (Number(this.state.tax || 0) > 0 && Number(this.state.tax || 0) <= 100) {
+            taxValue = (Number(this.state.tax || 0) * Number(this.state.subtotal)) / 100;
+        }
+        return Number(taxValue);
+    };
+    getChangeAmount = (): number => {
+        return (this.state.tenderAmount || 0) - this.state.total;
+    };
+    handleTenderAmountChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+        var value = event.target.value;
+        if (Number(value) < 0) return;
+        var tenderAmount = value == '' ? undefined : Number(value);
+        this.setState({ tenderAmount: tenderAmount });
+    };
+    handleRemarksChange = (event: React.FormEvent<HTMLTextAreaElement>): void => {
+        this.setState({ remarks: event.currentTarget.value });
+    };
+    removeItem = (item: ICartItem): void => {
+        let newCartItems = this.state.cart.filter(i => i.cartId != item.cartId);
+        this.setState({ cart: newCartItems }, () => this.calculateTotal());
+    };
+    addToCart = (recipe: ItemInterface): void => {
+        let cartItem: ICartItem = {
+            cartId: uuid(),
+            id: recipe.id,
+            name: recipe.name,
+            image_path: recipe.image_path,
+            description: recipe.description,
+            cost: recipe.cost,
+            is_active: recipe.is_active,
+            vat_type: this.getAppSettings().vatType,
+            tax_rate: 0,
+            discount: 0,
+            quantity: 1,
+            category_id: recipe.category_id,
+            supplier_id: recipe.supplier_id,
+            in_stock: recipe.in_stock,
+            unit: recipe.unit,
+            old_tax_rate: 0,
+            old_vat_type: '',
+            old_discount: 0,
+            old_quantity: 0
+        };
+        this.setState({ selectItem: "first"});
+        this.setState({ cart: [cartItem, ...this.state.cart] }, () => {
+            this.calculateTotal();
+        });
+        this.setState({categories: this.state.selectOption});
+        if (this.state.hasaudio) {
+            new Audio('/audio/public_audio_ding.mp3').play();
+        }
+    };
+
+    handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
+        event.preventDefault();
+        let search = this.state.searchValue;
+        if (!search) return;
+        let searchValue = search.toLowerCase().trim();
+        let productFound = false;
+        this.state.categories.map((category: ICategory) => {
+            let _prod: ItemInterface | undefined;
+            _prod = category.items.find(
+                p => p.name.toLowerCase().includes(searchValue)
+            );
+            
+            if (_prod) {
+                this.addToCart(_prod);
+                productFound = true;
+                if (productFound) {
+                    this.setState({ searchValue: null });
+                    var searchInput: any = document.getElementById('barcode-input');
+                    if (searchInput) {
+                        searchInput.value = '';
+                    }
+                }
+
+                return;
+            }
+        });
+        if (!productFound) {
+            toast.error(t('No results found!', 'لم يتم العثور على نتائج!'));
+        }
+    };
+    handleSearchChange = (event: React.FormEvent<HTMLInputElement>): void => {
+        this.setState({ searchValue: event.currentTarget.value });
+    };
+
+    handleVatTypeChange = (event: any): void => {
+        this.setState({ vatType: event.target.value }, () => {
+            this.calculateTotal();
+        });
+    };
+
+    handleCustomerSearchChange = (event: React.FormEvent<HTMLInputElement>): void => {
+        var searchQuery = event.currentTarget.value.trim();
+        if (!searchQuery) {
+            this.setState({ customers: [] });
+            return;
+        }
+        httpService
+            .get(`/customers/search/all?query=${searchQuery}`)
+            .then((response: any) => {
+                this.setState({ customers: response.data.data });
+            })
+            .finally(() => { });
+    };
+
+    setCustomer = (customer: ICustomer): void => {
+        this.setState({ customer: customer });
+    };
+
+    selectCustomer(customer: ICustomer) {
+        this.setState({ customer: customer });
+        this.closeModal('customerModal');
+    }
+
+    closeModal = (id: string): void => {
+        const createModal = document.querySelector(`#${id}`);
+        if (createModal) {
+            var modalInstance = Modal.getInstance(createModal);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+        }
+    };
+    getAppSettings = (): any => {
+        return JSON.parse(this.props.settings);
+    };
+
+    currencyFormatValue = (number: any): any => {
+        var settings = this.getAppSettings();
+        return currency_format(
+            number,
+            settings.currencyPrecision,
+            settings.currencyDecimalSeparator,
+            settings.currencyThousandSeparator,
+            settings.currencyPosition,
+            settings.currencySymbol,
+            settings.trailingZeros
+        );
+    };
+
+    receiptExchangeRate = (): any => {
+        var settings = this.getAppSettings();
+        var value = Number(this.state.total) * Number(settings.exchangeRate);
+        return currency_format(value, 2, '.', ',', 'before', settings.exchangeCurrency, true);
+    };
+
+    removeCustomer() {
+        this.setState({ customer: undefined });
+    }
+    isProductAvailable = (product: ItemInterface): boolean => {
+        // if (product.continue_selling_when_out_of_stock) return true;
+        if (!product.is_active) return true;
+        if (product.in_stock > 0) return true;
+        return false;
+    };
     updateItemQuantity = (event: React.ChangeEvent<HTMLInputElement>, item: ICartItem): void => {
         var value = event.target.value;
         let cartItems = this.state.cart;
@@ -314,7 +567,7 @@ class PointOfSaleEdit extends Component<Props, State> {
             this.calculateTotal();
         });
     };
-
+    
     updateItemVatType = (item: ICartItem): void => {
         let cartItems = this.state.cart;
         let _prod = this.state.cart.find(p => p.cartId === item.cartId);
@@ -349,136 +602,8 @@ class PointOfSaleEdit extends Component<Props, State> {
         });
     };
 
-    updateItemPrice = (event: React.ChangeEvent<HTMLInputElement>, item: ICartItem): void => {
-        var value = event.target.value;
-        let cartItems = this.state.cart;
-        let _prod = this.state.cart.find(p => p.cartId === item.cartId);
-        if (!_prod) return;
-        if (Number(value) < 0) return;
-        _prod.price = value == '' ? undefined : Number(value);
-        this.setState({ cart: cartItems }, () => {
-            this.calculateTotal();
-        });
-    };
-    currencyFormatValue = (number: any): any => {
-        var settings = JSON.parse(this.props.settings);
-        return currency_format(
-            number,
-            settings.currencyPrecision,
-            settings.currencyDecimalSeparator,
-            settings.currencyThousandSeparator,
-            settings.currencyPosition,
-            settings.currencySymbol,
-            settings.trailingZeros
-        );
-    };
-
-    getChangeAmount = (): number => {
-        return (this.state.tenderAmount || 0) - this.state.total;
-    };
-    handleTenderAmountChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-        var value = event.target.value;
-        if (Number(value) < 0) return;
-        var tenderAmount = value == '' ? undefined : Number(value);
-        this.setState({ tenderAmount: tenderAmount });
-    };
-    handleRemarksChange = (event: React.FormEvent<HTMLTextAreaElement>): void => {
-        this.setState({ remarks: event.currentTarget.value });
-    };
-    removeItem = (item: ICartItem): void => {
-        let newCartItems = this.state.cart.filter(i => i.cartId != item.cartId);
-        this.setState({ cart: newCartItems }, () => {
-            this.calculateTotal();
-            this.setState({ deletedRecipes: [item, ...this.state.deletedRecipes] });
-        });
-    };
-
     togglePaidButton = (): void => {
         this.setState({ isPaid: !this.state.isPaid });
-    }
-
-    addToCart = (recipe: IRecipe): void => {
-        let cartItem: ICartItem = {
-            cartId: uuid(),
-            id: recipe.id,
-            name: recipe.name,
-            image_path: recipe.image_path,
-            description: recipe.description,
-            price: recipe.price,
-            is_active: recipe.is_active,
-            vat_type: this.getAppSettings().vatType,
-            tax_rate: 0,
-            discount: 0,
-            quantity: 1,
-            old_vat_type: this.getAppSettings().vatType,
-            old_tax_rate: 0,
-            old_discount: 0,
-            old_quantity: 0
-        };
-
-        this.setState({ cart: [cartItem, ...this.state.cart] }, () => {
-            this.calculateTotal();
-        });
-    };
-
-    // handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
-    //     event.preventDefault();
-    //     let search = this.state.searchValue;
-    //     if (!search) return;
-    //     let searchValue = search.toLowerCase().trim();
-    //     let productFound = false;
-    //     this.state.categories.map((category: ICategory) => {
-    //         let _prod = category.products.find(
-    //             p => p.name.toLowerCase().includes(searchValue) || p?.barcode?.toLowerCase() == searchValue || p?.sku?.toLowerCase() == searchValue
-    //         );
-    //         if (_prod) {
-    //             this.addToCart(_prod);
-    //             productFound = true;
-    //             return;
-    //         }
-    //     });
-    //     if (!productFound) {
-    //         toast.error(t('No results found!', 'لم يتم العثور على نتائج!'));
-    //     }
-    // };
-    handleSearchChange = (event: React.FormEvent<HTMLInputElement>): void => {
-        this.setState({ searchValue: event.currentTarget.value });
-    };
-
-    handleCustomerSearchChange = (event: React.FormEvent<HTMLInputElement>): void => {
-        var searchQuery = event.currentTarget.value.trim();
-        if (!searchQuery) {
-            this.setState({ customers: [] });
-            return;
-        }
-        httpService
-            .get(`/customers/search/all?query=${searchQuery}`)
-            .then((response: any) => {
-                this.setState({ customers: response.data.data });
-            })
-            .finally(() => {});
-    };
-
-    setCustomer = (customer: ICustomer): void => {
-        this.setState({ customer: customer });
-    };
-
-    selectCustomer(customer: ICustomer) {
-        this.setState({ customer: customer });
-        this.closeModal('customerModal');
-    }
-
-    closeModal = (id: string): void => {
-        const createModal = document.querySelector(`#${id}`);
-        if (createModal) {
-            var modalInstance = Modal.getInstance(createModal);
-            if (modalInstance) {
-                modalInstance.hide();
-            }
-        }
-    };
-    removeCustomer() {
-        this.setState({ customer: undefined });
     }
 
     createCustomer = (e: React.FormEvent<HTMLFormElement>): void => {
@@ -512,18 +637,25 @@ class PointOfSaleEdit extends Component<Props, State> {
                 if (form) {
                     form.reset();
                 }
-                this.closeModal('createCustomerModal');
+                this.closeModal('customerModal');
                 toast.info(t('Customer has been created', 'تم إنشاء زبون جديد'));
             })
             .finally(() => {
                 this.setState({ isLoading: false });
             });
     };
-    handleVatTypeChange = (event: any): void => {
-        this.setState({ vatType: event.target.value }, () => {
-            this.calculateTotal();
-        });
-    };
+
+    handleSelectItem = (e: React.FormEvent<HTMLSelectElement>): void => {
+        console.log(e.currentTarget.value);
+        this.setState({selectItem: e.currentTarget.value});
+        let item = this.state.selectOption.find((category: ICategory) => category.id === e.currentTarget.value);
+        if(item){
+            this.categoryClick(item);
+        } else {
+            this.backClick()
+        }
+    }
+
     handleCustomerNameChange = (event: React.FormEvent<HTMLInputElement>): void => {
         this.setState({ customerName: event.currentTarget.value });
     };
@@ -549,33 +681,212 @@ class PointOfSaleEdit extends Component<Props, State> {
         this.setState({ customerApartment: event.currentTarget.value });
     };
 
+    printInvoice = (data: any, settings: any): void => {
+        var receipt = window.open(``, 'PRINT', 'height=600,width=300');
+        var order = data.order;
+        if (!receipt) return;
+        receipt.document.write(`<html lang="${settings.lang}" dir="${settings.dir}"><head><title>Order Receipt ${order.number}</title><style>`);
+        receipt.document.write(`@page { size: auto;  margin: 0mm; }`);
+        receipt.document.write(`.table1 { border-collapse: collapse; }`);
+        receipt.document.write(`.table1>tbody:before{ content: "-"; display: block; line-height: 10px; color: transparent; }`);
+        receipt.document.write(`tr { min-height: 50px; }`);
+        receipt.document.write(`.table1>tbody>tr>td { border: 1px solid black; text-align: center; font-size: 1.2rem; padding: 5px; }`);
+        receipt.document.write(`.table2 { border-collapse: collapse; margin-bottom: 15px; }`);
+        receipt.document.write(`.table2>tbody>tr>td { border: 1px solid black; font-size: 1.5rem; width: 200px; padding: 5px;  }`);
+        receipt.document.write(`</style></head><body>`);
+
+        receipt.document.write(`<div style="margin: 30px; margin-top: 30px;">`);
+        receipt.document.write(`<div style="margin-top: 1rem; margin-bottom: 0.2rem;text-align: center !important;">`);
+        if (settings.storeName) {
+            receipt.document.write(`<div style="padding-right: 1rem;padding-left: 1rem;margin-bottom: 1rem"><div style="logo-container">${settings.logo}</div></div>`);
+        } else {
+            if (settings.storeName) {
+                receipt.document.write(`<div style="font-size: 1.50rem;">${settings.storeName}</div>`);
+            }
+        }
+        receipt.document.write(`<div style="font-size: 2.00rem;">SALE INVOICE</div>`);
+        receipt.document.write(`<div style="font-size: 1.00rem;">${order.number}</div>`);
+        receipt.document.write(`<div style="font-size: 1.50rem; display: flex; justify-content: flex-end; gap: 20px;">`);
+        receipt.document.write(`<div>DATE : </div><div>${order.date_view}</div></div>`);
+        if(order.customer_id) {
+            receipt.document.write(`<div style="font-size: 1.50rem; display: flex; justify-content: space-between; gap: 30px;">`);
+
+            receipt.document.write(`<div style="display: flex; gap: 20px;">`);
+            receipt.document.write(`<div>Client : </div>`);
+            receipt.document.write(`<div>${order.customer.name}</div>`);
+            receipt.document.write(`</div>`);
+
+            if(settings.currentSymbol)
+                receipt.document.write(`<div>${settings.currentSymbol}</div>`);
+
+            receipt.document.write(`</div>`);
+        }
+
+        receipt.document.write(`<div style="font-size: 1.50rem; display: flex; gap: 20px;">`);
+        receipt.document.write(`<div>Address : </div>`);
+        if (settings.storeAddress) {
+            receipt.document.write(`<div style="font-size: 1.50rem;">${settings.storeAddress}</div>`);
+        }
+        receipt.document.write(`</div>`);
+        receipt.document.write(`</div>`);
+
+        receipt.document.write('<div style="margin-top: 20px;">');
+        receipt.document.write('<table style="width: 100%;" class="table1">');
+        receipt.document.write('<thead><tr>');
+        receipt.document.write('<th style="font-size: 1.50rem; border: none;">');
+        receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">Name</div>');
+        receipt.document.write('</th>');
+        receipt.document.write('<th style="font-size: 1.50rem; border: none;">');
+        receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">Qty</div>');
+        receipt.document.write('</th>');
+        receipt.document.write('<th style="font-size: 1.50rem; border: none;">');
+        receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">U cost</div>');
+        receipt.document.write('</th>');
+        receipt.document.write('<th style="font-size: 1.50rem; border: none;">');
+        receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">Total</div>');
+        receipt.document.write('</th>');
+        receipt.document.write('</tr></thead>');
+
+        receipt.document.write('<tbody>');
+        order.order_details.map((detail: any) => {
+            if (receipt) {
+                receipt.document.write(`<tr>`);
+                receipt.document.write(`<td>${detail.item.name}</td>`);
+                receipt.document.write(`<td>${detail.quantity}</td>`);
+                receipt.document.write(`<td>${this.currencyFormatValue(detail.cost)}</td>`);
+                receipt.document.write(`<td>${this.currencyFormatValue(detail.total)}</td>`);
+                receipt.document.write(`</tr>`);
+            }
+        });
+        receipt.document.write(`<tr>`);
+        receipt.document.write(`<td colspan="4">`);
+        receipt.document.write(`<div style="float: right;">`);
+        
+        receipt.document.write(`<table class="table2" style="margin-top: 30px;">`);
+        receipt.document.write(`<tbody>`);
+        receipt.document.write(`<tr>`);
+        receipt.document.write(`<td>Total</td>`);
+        receipt.document.write(`<td>${this.currencyFormatValue(order.subtotal)}</td>`);
+        receipt.document.write(`</tr>`);
+        receipt.document.write(`</tbody>`);
+        receipt.document.write(`</table>`);
+        
+        receipt.document.write(`<table class="table2" style="margin-top: 30px;">`);
+        receipt.document.write(`<tbody>`);
+        receipt.document.write(`<tr>`);
+        receipt.document.write(`<td>Disc %</td>`);
+        receipt.document.write(`<td>${order.discount * 100}</td>`);
+        receipt.document.write(`</tr>`);
+        receipt.document.write(`</tbody>`);
+        receipt.document.write(`</table>`);
+        
+        receipt.document.write(`<table class="table2" style="margin-top: 30px;">`);
+        receipt.document.write(`<tbody>`);
+        receipt.document.write(`<tr>`);
+        receipt.document.write(`<td>Disc</td>`);
+        receipt.document.write(`<td>${this.currencyFormatValue(order.discount * order.subtotal)}</td>`);
+        receipt.document.write(`</tr>`);
+        receipt.document.write(`</tbody>`);
+        receipt.document.write(`</table>`);
+        
+        receipt.document.write(`<table class="table2" style="margin-top: 30px;">`);
+        receipt.document.write(`<tbody>`);
+        receipt.document.write(`<tr>`);
+        receipt.document.write(`<td>Total After Discount</td>`);
+        receipt.document.write(`<td>`);
+        receipt.document.write(`<div>${this.currencyFormatValue(order.total)}</div>`);
+        receipt.document.write(`<div>${order.receipt_exchange_rate}</div>`);
+        receipt.document.write(`</td>`);
+        receipt.document.write(`</tr>`);
+        receipt.document.write(`</tbody>`);
+        receipt.document.write(`</table>`);
+        receipt.document.write(`</div></td></tr>`);
+
+        receipt.document.write(`<tr><td colspan="4" style="height: 50px;">0/100 , شكرا ألفرو</td></tr>`);
+        receipt.document.write(`<tr><td colspan="4" style="height: 50px;"></td></tr>`);
+        receipt.document.write(`<tr><td colspan="4" style="height: 50px;"></td></tr>`);
+        receipt.document.write(`</tbody></table></div></div>`);
+        receipt.document.write(`</body>`);
+        receipt.document.write(`</html>`);
+
+        receipt.document.close();
+        receipt.focus();
+        receipt.print();
+        receipt.close();
+    };
+
     modalCloseButton = (): React.ReactNode => {
         return <button type="button" className="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>;
+    };
+    modalCloseButtonWhite = (): React.ReactNode => {
+        return <button type="button" className="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>;
+    };
+
+    handleOrderTypeChange = (event: React.ChangeEvent<HTMLSelectElement>): void => {
+        this.setState({ orderType: event.target.value }, () => {
+            this.calculateTotal();
+        });
+    };
+
+    isOrderDelivery = (): boolean => {
+        return this.state.orderType == 'delivery';
+    };
+
+
+    handleCloseModal = (): void => {
+        this.closeModal('checkoutModal');
     };
 
     render(): JSX.Element {
         return (
             <React.Fragment>
                 <div className="d-flex py-3">
-                    <div className=" flex-grow-1">
-                        <button className="btn btn-outline-primary me-2" onClick={event => this.goToOrderList()}>
-                            {t('Back', 'العودة')}
-                        </button>
-                        <button className="btn btn-light me-2 bg-white border" data-bs-toggle="modal" data-bs-target="#customerModal">
-                            <span className="d-flex align-items-center">
-                                <UserCircleIcon className="hero-icon me-1" /> {t('Customer', 'الزبون')}
-                            </span>
-                        </button>
+                    <div className="d-flex flex-grow-1">
+                        <div className="flex-grow-1">
+                            <button className="btn btn-outline-primary me-2" onClick={event => this.goToOrderList()}>
+                                {t('Back', 'العودة')}
+                            </button>
+                            <button className="btn btn-light me-5 bg-white border" data-bs-toggle="modal" data-bs-target="#customerModal">
+                                <span className="d-flex align-items-center">
+                                    <UserCircleIcon className="hero-icon me-1" /> {t('Customer', 'الزبون')}
+                                </span>
+                            </button>
+                            <button className="btn btn-danger" onClick={event => this.reset()}>
+                                <span className="d-flex align-items-center">
+                                    <ArrowPathIcon className="hero-icon me-1" /> {t('Reset?', 'إعادة ضبط')}
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                    <div className="d-flex">
+                        {this.getAppSettings().enableTakeoutAndDelivery && (
+                            <select
+                                name="order-type"
+                                id="order-type"
+                                className="form-select form-select-lg px-5"
+                                defaultValue="takeout"
+                                onChange={e => this.handleOrderTypeChange(e)}>
+                                <option value="takeout">{t('Takeout', 'أستلام')}</option>
+                                <option value="delivery">{t('Delivery', 'توصيل')}</option>
+                            </select>
+                        )}
                     </div>
                 </div>
-
                 <div className="row">
                     <div className="col-md-6">
                         <div className="card w-100 card-gutter rounded-0">
                             <div className="card-header bg-white border-bottom-0 p-0">
-                                <div className="p-3">
-                                    {t('Invoice', 'الفاتورة')} <span className="fw-bold">{this.state.orderNumber}</span>
-                                </div>
+                                <form onSubmit={event => this.handleSearchSubmit(event)}>
+                                    <input
+                                        type="search"
+                                        className="form-control form-control-lg rounded-0"
+                                        name="search"
+                                        id="barcode-input"
+                                        //placeholder={t('Scan barcode or search by name or SKU', 'امسح الباركود ضوئيًا أو ابحث بالاسم أو SKU')}
+                                        placeholder={t('Search by name...', 'البحث عن طريق الإسم...')}
+                                        onChange={event => this.handleSearchChange(event)}
+                                    />
+                                </form>
                                 <table className="table table-bordered mb-0">
                                     <thead>
                                         <tr>
@@ -607,23 +918,25 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                     return (
                                                         <tr key={item.cartId}>
                                                             <td width={300}>
-                                                                <div className=" d-flex">
-                                                                    <div className="me-2 d-flex align-items-center">
-                                                                        <img src={item.image_path} alt="img" className="rounded-2" height={50} />
-                                                                    </div>
-                                                                    <div>
-                                                                        <div className="fw-bold">{item.name}</div>
-                                                                        <div className="fw-normal">
-                                                                            <input
-                                                                                type="number"
-                                                                                className="form-control text-center"
-                                                                                value={item.price}
-                                                                                onFocus={e => e.target.select()}
-                                                                                onChange={e => this.updateItemPrice(e, item)}
-                                                                            />
+                                                                <div className="d-flex mb-2">
+                                                                    <div className="d-flex flex-grow-1">
+                                                                        <div className="me-2 d-flex align-items-center">
+                                                                            <img src={item.image_path || "/images/placeholder.webp"} alt="img" className="rounded-2" height={50} />
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="fw-bold">{item.name}</div>
+                                                                            <div className="fw-normal">
+                                                                                <input
+                                                                                    type="number"
+                                                                                    className="form-control text-center"
+                                                                                    value={item.cost}
+                                                                                    onFocus={e => e.target.select()}
+                                                                                    onChange={e => this.updateItemcost(e, item)}
+                                                                                />
+                                                                            </div>
                                                                         </div>
                                                                     </div>
-                                                                    <div className="ms-auto d-flex align-items-center">
+                                                                    <div className="me-auto d-flex align-items-center">
                                                                         <XCircleIcon
                                                                             className="hero-icon-sm align-middle text-danger cursor-pointer user-select-none"
                                                                             onClick={event => this.removeItem(item)}
@@ -631,6 +944,7 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                                     </div>
                                                                 </div>
                                                             </td>
+
                                                             <td width={150} className="p-0 align-middle text-center">
                                                                 <input
                                                                     type="number"
@@ -660,7 +974,7 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                                 />
                                                             </td>
                                                             <td width={150} className="text-center align-middle">
-                                                                {this.calculateItemPrice(item)}
+                                                                {this.calculateItemcost(item)}
                                                             </td>
                                                         </tr>
                                                     );
@@ -692,7 +1006,8 @@ class PointOfSaleEdit extends Component<Props, State> {
                                         </tr>
                                         <tr>
                                             <td width={200}>
-                                                {t('Customer', 'الزبون')}: {this.state.customer ? this.state.customer.name : 'N/A'}
+                                                {t('Customer', 'الزبون')}:{' '}
+                                                {this.state.customer ? <span className="fw-bold">{this.state.customer.name}</span> : 'N/A'}
                                                 {this.state.customer && (
                                                     <div className="float-end">
                                                         <XCircleIcon
@@ -715,8 +1030,23 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                 className="text-start align-middle clickable-cell"
                                                 data-bs-toggle="modal"
                                                 data-bs-target="#deliveryChargeModal">
-                                                {t('Delivery Charge', 'رسوم التوصيل')}:{' '}
-                                                {this.state.deliveryCharge ? this.currencyFormatValue(this.state.deliveryCharge) : 'N/A'}
+                                                {this.getAppSettings().enableTakeoutAndDelivery ? (
+                                                    <>
+                                                        {this.isOrderDelivery() && (
+                                                            <>
+                                                                {t('Delivery Charge', 'رسوم التوصيل')} :{' '}
+                                                                {this.state.deliveryCharge
+                                                                    ? this.currencyFormatValue(this.state.deliveryCharge)
+                                                                    : 'N/A'}
+                                                            </>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        {t('Delivery Charge', 'رسوم التوصيل')} :{' '}
+                                                        {this.state.deliveryCharge ? this.currencyFormatValue(this.state.deliveryCharge) : 'N/A'}
+                                                    </>
+                                                )}
                                             </td>
                                             <td
                                                 width={200}
@@ -733,7 +1063,7 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                 {this.state.discount || 0}%
                                             </td>
                                         </tr>
-                                        <tr className=" alert-success">
+                                        <tr className="alert-success">
                                             {this.state.vatType == 'add' ? (
                                                 <td
                                                     width={200}
@@ -761,7 +1091,8 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                 {t('Total', 'الإجمالي')}
                                             </td>
                                             <td width={200} className="text-center align-middle fw-bold fs-5">
-                                                {this.currencyFormatValue(this.state.total)}
+                                                <div> {this.currencyFormatValue(this.state.total)}</div>
+                                                {this.getAppSettings().showExchangeRateOnReceipt && <div>{this.receiptExchangeRate()}</div>}
                                             </td>
                                         </tr>
                                     </tbody>
@@ -769,20 +1100,50 @@ class PointOfSaleEdit extends Component<Props, State> {
                             </div>
                             <button
                                 type="button"
-                                className="btn btn-info py-4 rounded-0 shadow-sm fs-3 btn-lg w-100"
+                                className="btn btn-success py-4 rounded-0 shadow-sm fs-3 btn-lg w-100"
                                 data-bs-toggle="modal"
                                 data-bs-target="#checkoutModal">
-                                {t(' UPDATED CHECKOUT', 'تحديث')}
+                                {t('CHECKOUT', 'الدفع')}
                             </button>
+                            {/* <button type="button" className="btn btn-success py-4 rounded-0 shadow-sm fs-3 btn-lg w-100" onClick={e => this.storeOrder()}>
+                                الدفع
+                            </button> */}
                         </div>
                     </div>
                     <div className="col-md-6">
                         <div className="card w-100 card-gutter rounded-0">
                             <div className="card-header bg-white">
-                                <div className="d-flex px-0" style={{ minHeight: 'calc(1.5em + 1rem + 5px)', padding: '0.5rem' }}>
-                                    <a className="text-decoration-none cursor-pointer pe-2 fs-5">
-                                        {t('COFFEES', 'قهوة')}
-                                    </a>
+                                <div className="d-flex px-4 justify-content-between align-items-center" style={{ minHeight: 'calc(1.5em + 1rem + 5px)', padding: '0.5rem' }}>
+                                    <div className='d-flex align-items-center'>
+                                        <a className="text-decoration-none cursor-pointer pe-2 fs-5" onClick={() => this.backClick()}>
+                                            {t('COFFEES', 'قهوة')}
+                                        </a>
+                                        {this.state.showProducts && (
+                                            <div className="d-flex align-items-center">
+                                                {this.getAppSettings().dir == 'rtl' ? (
+                                                    <ArrowLeftIcon className="hero-icon pe-2" />
+                                                ) : (
+                                                    <ArrowRightIcon className="hero-icon pe-2" />
+                                                )}
+                                                <span className="fw-normal text-muted pe-2 fs-5 text-uppercase" aria-current="page">
+                                                    {this.state.categoryName}
+                                                </span>
+                                                {this.getAppSettings().dir == 'rtl' ? (
+                                                    <ArrowLeftIcon className="hero-icon pe-2" />
+                                                ) : (
+                                                    <ArrowRightIcon className="hero-icon pe-2" />
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <select name="product" className='form-control w-50' value={this.state.selectItem} onChange={(e) => this.handleSelectItem(e)}>
+                                        <option value="first">Select item</option>
+                                        {this.state.selectOption.length > 0 && (
+                                            this.state.selectOption.map((item: ICategory) => (
+                                                <option value={item.id}>{item.name}</option>
+                                            ))
+                                        )}
+                                    </select>
                                 </div>
                             </div>
 
@@ -797,28 +1158,28 @@ class PointOfSaleEdit extends Component<Props, State> {
                                         <div className="fw-bold h3 text-center">{t('Loading...', 'جاري التحميل...')}</div>
                                     </div>
                                 )}
-
+                                {!this.state.showProducts && (
                                     <React.Fragment>
-                                        {this.state.recipes.length > 0 && (
+                                        {this.state.categories.length > 0 && (
                                             <div className="row">
-                                                {this.state.recipes.map((recipe: IRecipe) => {
+                                                {this.state.categories.map((category: ICategory) => {
                                                     return (
-                                                        <div key={recipe.id} className="col-lg-4 col-md-4 col-sm-6 col-6 mb-0 p-0">
+                                                        <div key={category.id} className="col-lg-4 col-md-4 col-sm-6 col-6 mb-0 p-0">
                                                             <div
                                                                 className="position-relative w-100 border cursor-pointer user-select-none"
-                                                                onClick={event => this.addToCart(recipe)}>
+                                                                onClick={() => this.categoryClick(category)}>
                                                                 <picture>
-                                                                    <source type="image/jpg" srcSet={recipe.image_path} />
+                                                                    <source type="image/jpg" srcSet={category.image_path || "/images/placeholder.webp"} />
                                                                     <img
-                                                                        alt={recipe.name}
-                                                                        src={recipe.image_path}
+                                                                        alt={category.name || " " }
+                                                                        src={category.image_path || "/images/placeholder.webp"}
                                                                         aria-hidden="true"
                                                                         className="object-fit-cover h-100 w-100"
                                                                     />
                                                                 </picture>
                                                                 <div className="position-absolute bottom-0 start-0 h-100 d-flex flex-column align-items-center justify-content-center p-4 mb-0 w-100 cell-item-label text-center">
                                                                     <div className="product-name" dir="auto">
-                                                                        {recipe.name}
+                                                                        {category.name}
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -828,12 +1189,49 @@ class PointOfSaleEdit extends Component<Props, State> {
                                             </div>
                                         )}
                                     </React.Fragment>
+                                )}
+                                {this.state.showProducts && (
+                                    <React.Fragment>
+                                        {this.state.products.length > 0 && (
+                                            <div className="row overflow-auto">
+                                                {this.state.products.map((product: ItemInterface) => {
+                                                    return (
+                                                        <>
+                                                            {this.isProductAvailable(product) && (
+                                                                <div key={product.id} className="col-lg-4 col-md-4 col-sm-6 col-6 mb-0 p-0">
+                                                                    <div
+                                                                        className="position-relative w-100 border cursor-pointer user-select-none"
+                                                                        onClick={event => this.addToCart(product)}>
+                                                                        <picture>
+                                                                            <source type="image/jpg" srcSet={product.image_path || "/images/placeholder.webp"} />
+                                                                            <img
+                                                                                alt={product.name || " "}
+                                                                                src={product.image_path || "/images/placeholder.webp"}
+                                                                                aria-hidden="true"
+                                                                                className="object-fit-cover h-100 w-100"
+                                                                            />
+                                                                        </picture>
+                                                                        <div className="position-absolute bottom-0 start-0 h-100 d-flex flex-column align-items-center justify-content-center p-4 mb-0 w-100 cell-item-label text-center">
+                                                                            <div className="fw-bold" dir="auto">
+                                                                                {product.name}
+                                                                            </div>
+                                                                            <div className="fw-normal">${ product.cost }</div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </React.Fragment>
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>
-
-                <div className="modal" id="discountModal" tabIndex={-1} aria-labelledby="discountModalLabel" aria-hidden="true">
+                <div className="modal zoom-out-entrance" id="discountModal" tabIndex={-1} aria-labelledby="discountModalLabel" aria-hidden="true">
                     <div className="modal-dialog modal-dialog-centered">
                         <div className="modal-content">
                             <div className="modal-header">
@@ -850,7 +1248,7 @@ class PointOfSaleEdit extends Component<Props, State> {
                                         className="form-control form-control-lg text-center"
                                         onFocus={e => e.target.select()}
                                         value={this.state.discount}
-                                        onChange={event => this.handleDiscountChange(event)}
+                                        onChange={this.handleDiscountChange}
                                     />
                                 </div>
                             </div>
@@ -858,7 +1256,12 @@ class PointOfSaleEdit extends Component<Props, State> {
                     </div>
                 </div>
 
-                <div className="modal" id="deliveryChargeModal" tabIndex={-1} aria-labelledby="deliveryChargeModalLabel" aria-hidden="true">
+                <div
+                    className="modal zoom-out-entrance"
+                    id="deliveryChargeModal"
+                    tabIndex={-1}
+                    aria-labelledby="deliveryChargeModalLabel"
+                    aria-hidden="true">
                     <div className="modal-dialog modal-dialog-centered">
                         <div className="modal-content">
                             <div className="modal-header">
@@ -874,15 +1277,15 @@ class PointOfSaleEdit extends Component<Props, State> {
                                         type="number"
                                         className="form-control form-control-lg text-center"
                                         value={this.state.deliveryCharge}
+                                        onChange={this.handleDeliveryChargeChange}
                                         onFocus={e => e.target.select()}
-                                        onChange={event => this.handleDeliveryChargeChange(event)}
                                     />
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div className="modal" id="taxModal" tabIndex={-1} aria-labelledby="taxModalLabel" aria-hidden="true">
+                <div className="modal zoom-out-entrance" id="taxModal" tabIndex={-1} aria-labelledby="taxModalLabel" aria-hidden="true">
                     <div className="modal-dialog modal-dialog-centered">
                         <div className="modal-content">
                             <div className="modal-header">
@@ -899,7 +1302,7 @@ class PointOfSaleEdit extends Component<Props, State> {
                                         className="form-control form-control-lg text-center"
                                         onFocus={e => e.target.select()}
                                         value={this.state.tax}
-                                        onChange={event => this.handleTaxChange(event)}
+                                        onChange={this.handleTaxChange}
                                     />
                                 </div>
                                 <div className="mb-3">
@@ -917,7 +1320,7 @@ class PointOfSaleEdit extends Component<Props, State> {
                         </div>
                     </div>
                 </div>
-                <div className="modal" id="customerModal" tabIndex={-1} aria-labelledby="customerModalLabel" aria-hidden="true">
+                <div className="modal zoom-out-entrance" id="customerModal" tabIndex={-1} aria-labelledby="customerModalLabel" aria-hidden="true">
                     <div className="modal-dialog modal-dialog-centered">
                         <div className="modal-content">
                             <div className="modal-header">
@@ -1077,7 +1480,8 @@ class PointOfSaleEdit extends Component<Props, State> {
                         </div>
                     </div>
                 </div>
-                <div className="modal fade" id="checkoutModal" tabIndex={-1} aria-labelledby="checkoutModalLabel" aria-hidden="true">
+
+                <div className="modal zoom-out-entrance" id="checkoutModal" tabIndex={-1} aria-labelledby="checkoutModalLabel" aria-hidden="true">
                     <div className="modal-dialog modal-dialog-centered modal-lg">
                         <div className="modal-content">
                             <div className="modal-header">
@@ -1090,7 +1494,7 @@ class PointOfSaleEdit extends Component<Props, State> {
                                         <table className="table table-borderless">
                                             <tbody>
                                                 <tr>
-                                                    <td className="text-danger-sec">{t('Subtotal', 'المجموع')}</td>
+                                                    <td className="text-danger-sec"> {t('Subtotal', 'المجموع')}</td>
                                                     <td className="text-white">{this.currencyFormatValue(this.state.subtotal)}</td>
                                                 </tr>
                                                 <tr>
@@ -1102,16 +1506,17 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                     </td>
                                                 </tr>
                                                 <tr>
-                                                    <td className="text-danger-sec">{t('Discount', 'الخصم')}</td>
+                                                    <td className="text-danger-sec"> {t('Discount', 'الخصم')}</td>
                                                     <td className="text-white">{this.currencyFormatValue(this.state.discount || 0)}</td>
                                                 </tr>
                                                 <tr>
-                                                    <td className="text-danger-sec">{t('Delivery Charge', 'رسوم التوصيل')}</td>
+                                                    <td className="text-danger-sec"> {t('Delivery Charge', 'رسوم التوصيل')}</td>
                                                     <td className="text-white">{this.currencyFormatValue(this.state.deliveryCharge || 0)}</td>
                                                 </tr>
                                                 {this.state.vatType == 'add' ? (
                                                     <tr>
                                                         <td className="text-danger-sec">
+                                                            {' '}
                                                             {t('VAT', 'الضريبة')} {this.state.tax || 0}%
                                                         </td>
                                                         <td className="text-white">{this.currencyFormatValue(this.getTotalTax())}</td>
@@ -1131,13 +1536,13 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                     </>
                                                 )}
                                                 <tr className="fw-bold">
-                                                    <td className="text-danger-sec">{t('Total', 'المجموع الإجمالي')}</td>
+                                                    <td className="text-danger-sec"> {t('Total', 'المجموع الإجمالي')}</td>
                                                     <td className="text-white">{this.currencyFormatValue(this.state.total)}</td>
                                                 </tr>
                                                 {this.state.customer && (
                                                     <React.Fragment>
                                                         <tr>
-                                                            <td className="text-danger-sec align-middle">{t('Customer', 'الزبون')}</td>
+                                                            <td className="text-danger-sec align-middle"> {t('Customer', 'الزبون')}</td>
                                                             <td className="text-white">{this.state.customer.name}</td>
                                                         </tr>
                                                         <tr>
@@ -1161,22 +1566,22 @@ class PointOfSaleEdit extends Component<Props, State> {
                                                 className="form-control"
                                                 id="remarks"
                                                 rows={3}
-                                                onChange={event => this.handleRemarksChange(event)}
-                                                value={this.state.remarks || ''}></textarea>
+                                                onChange={event => this.handleRemarksChange(event)}>
+                                                {this.state.remarks}
+                                            </textarea>
                                         </div>
                                     </div>
-                                    <div className="col-6 py-3 bg-light d-flex flex-column">
-                                        <div className="text-center text-danger">{t('CHECKOUT', 'الدفع')}</div>
+                                    <div className="col-6 py-3 bg-body d-flex flex-column">
+                                        <div className="text-center text-danger"> {t('CHECKOUT', 'الدفع')}</div>
                                         <hr />
                                         <div className="mb-3">
-                                            <div className="form-label text-center">{t('Tender Amount', 'المبلغ المدفوع')}</div>
+                                            <div className="form-label text-center"> {t('Tender Amount', 'المبلغ المدفوع')}</div>
                                             <input
                                                 type="number"
                                                 className="form-control form-control-lg text-center"
-                                                id="tender-amount"
-                                                value={this.state.tenderAmount}
+                                                value={this.state.tenderAmount?.toFixed(2)}
                                                 onFocus={e => e.target.select()}
-                                                onChange={event => this.handleTenderAmountChange(event)}
+                                                onChange={this.handleTenderAmountChange}
                                             />
                                         </div>
                                         <hr />
@@ -1191,11 +1596,14 @@ class PointOfSaleEdit extends Component<Props, State> {
                                             </tbody>
                                         </table>
                                         <div className="mt-auto">
+                                            {/* <button className="btn btn-primary btn-lg py-3 w-100 disabled cursor-not-allowed mb-3">
+                                                <i className="bi bi-credit-card me-2"></i> {t('PAY WITH CARD', 'الدفع بالبطاقة')}
+                                            </button> */}
                                             <button
-                                                className="btn btn-info border btn-lg w-100"
+                                                className="btn btn-primary btn-lg py-3 w-100"
                                                 disabled={this.state.isLoading}
-                                                onClick={e => this.updateOrder()}>
-                                                {t('UPDATE', 'تحديث')}
+                                                onClick={e => this.storeOrder()}>
+                                                {t('SUBMIT', 'حفظ')}
                                             </button>
                                         </div>
                                     </div>
@@ -1211,7 +1619,7 @@ class PointOfSaleEdit extends Component<Props, State> {
 }
 export default PointOfSaleEdit;
 
-const element = document.getElementById('pos-edit');
+const element = document.getElementById('pos');
 if (element) {
     const props = Object.assign({}, element.dataset);
     const root = ReactDOM.createRoot(element);

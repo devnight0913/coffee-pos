@@ -33,6 +33,10 @@ class OrderDetail extends Model
     {
         return $this->belongsTo(Recipe::class);
     }
+    public function item()
+    {
+        return $this->belongsTo(Item::class);
+    }
 
 
     /**

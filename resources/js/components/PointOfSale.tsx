@@ -165,8 +165,6 @@ class PointOfSale extends Component<Props, State> {
         } else {
             _deliveryCharge = this.state.deliveryCharge || 0;
         }
-
-        // console.log(this.state.cart);
         httpService
             .post(`/order`, {
                 customer: this.state.customer,
@@ -187,7 +185,7 @@ class PointOfSale extends Component<Props, State> {
                     this.resetPos();
                     toast.info(t('Saved!', 'تم الحفظ'));
                     this.closeModal('checkoutModal');
-                    // console.log(response.data);
+                    console.log(response.data);
                     this.printInvoice(response.data, this.getAppSettings());
                 }
             })
@@ -695,7 +693,7 @@ class PointOfSale extends Component<Props, State> {
         order.order_details.map((detail: any) => {
             if (receipt) {
                 receipt.document.write(`<tr>`);
-                receipt.document.write(`<td>${detail.recipe.name}</td>`);
+                receipt.document.write(`<td>${detail.item.name}</td>`);
                 receipt.document.write(`<td>${detail.quantity}</td>`);
                 receipt.document.write(`<td>${this.currencyFormatValue(detail.cost)}</td>`);
                 receipt.document.write(`<td>${this.currencyFormatValue(detail.total)}</td>`);
@@ -739,7 +737,7 @@ class PointOfSale extends Component<Props, State> {
         receipt.document.write(`<td>Total After Discount</td>`);
         receipt.document.write(`<td>`);
         receipt.document.write(`<div>${this.currencyFormatValue(order.total)}</div>`);
-        receipt.document.write(`<div>${this.currencyFormatValue(order.receipt_exchange_rate)}</div>`);
+        receipt.document.write(`<div>${order.receipt_exchange_rate}</div>`);
         receipt.document.write(`</td>`);
         receipt.document.write(`</tr>`);
         receipt.document.write(`</tbody>`);

@@ -131,6 +131,7 @@ class Order extends Model
         if ($this->exchange_rate <= 0) return '';
         $value = $this->total * $this->exchange_rate;
         return custom_currency_format($value, $this->exchange_rate_currency);
+        // return $value;
     }
 
 

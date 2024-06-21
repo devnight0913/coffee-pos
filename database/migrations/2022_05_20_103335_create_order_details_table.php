@@ -17,6 +17,7 @@ class CreateOrderDetailsTable extends Migration
             $table->uuid('id')->primary();
             $table->foreignUuid('order_id')->constrained()->onDelete('cascade');
             $table->foreignUuid('recipe_id')->constrained()->onDelete('cascade');
+            $table->foreignUuid('item_id')->constrained()->onDelete('cascade');
             $table->float('quantity');
             $table->integer('tax_rate');
             $table->string('vat_type');

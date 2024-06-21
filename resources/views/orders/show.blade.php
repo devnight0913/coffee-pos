@@ -7,7 +7,7 @@
         <div class="h4 mb-0 flex-grow-1">
             <div class="h4 mb-0">{{ $order->number }}</div>
             <div class="text-muted mb-0 small text-start" dir="ltr">
-                {{ $order->created_at_view }}
+                {{ $order->created_at }}
             </div>
         </div>
         @can_edit
@@ -127,7 +127,7 @@
                         <tbody>
                             <tr>
                                 <td width="50%">@lang('Paid')</td>
-                                <td width="50%">{{ $order->tender_amount_view }}</td>
+                                <td width="50%">${{ $order->tender_amount }}</td>
                             </tr>
                             <tr>
                                 <td width="50%">@lang('State')</td>
@@ -139,15 +139,15 @@
                                     @endif
                                 </td>
                             </tr>
-                            {{-- <tr>
-                                <td width="50%">@lang('Change')</td>
-                                <td width="50%">{{ $order->change_view }}</td>
-                            </tr>
                             <tr>
+                                <td width="50%">@lang('Change')</td>
+                                <td width="50%">${{ $order->change }}</td>
+                            </tr>
+                            {{-- <tr>
                                 <td width="50%">@lang('Owe')</td>
                                 <td width="50%">{{ $order->owe_view }}</td>
                             </tr> --}}
-                            @can_edit
+                            {{-- @can_edit
                             <tr>
                                 <td width="50%">@lang('Cost')</td>
                                 <td width="50%">{{ $order->cost_view }}</td>
@@ -156,7 +156,7 @@
                                 <td width="50%">@lang('Profit')</td>
                                 <td width="50%">{{ $order->profit_view }}</td>
                             </tr>
-                            @endcan_edit
+                            @endcan_edit --}}
                         </tbody>
                     </table>
                 </div>
@@ -176,7 +176,7 @@
             <tbody class="border-top-0">
                 @foreach ($order->order_details as $detail)
                     <tr>
-                        <x-td>{{ $detail->recipe->name }}</x-td>
+                        <x-td>{{ $detail->item->name }}</x-td>
                         <x-td>{{ $detail->quantity }}</x-td>
                         <x-td>{{ $detail->view_price }}</x-td>
                         <x-td>{{ $detail->view_total }}</x-td>

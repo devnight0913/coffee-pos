@@ -100,7 +100,7 @@
                 <tbody>
                     @foreach ($order->order_details as $detail)
                         <tr>
-                            <td>{{ $detail->recipe->name }}</td>
+                            <td>{{ $detail->item->name }}</td>
                             <td>{{ $detail->quantity }}</td>
                             <td>{{ currency_format($detail->price) }}</td>
                             <td>{{ currency_format($detail->total) }}</td>

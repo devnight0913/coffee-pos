@@ -9,6 +9,7 @@ use App\Models\Inventory;
 use App\Models\Order;
 use App\Models\OrderDetail;
 use App\Models\Recipe;
+use App\Models\Item;
 use App\Models\Settings;
 use App\Models\User;
 use Carbon\Carbon;
@@ -19,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\View\View;
 use \Milon\Barcode\DNS1D;
+use Log;
 
 class OrderController extends Controller
 {
@@ -88,9 +90,9 @@ class OrderController extends Controller
 
     public function show(string $id): View
     {
-        $order = Order::with('customer', 'user', 'order_details', 'order_details.recipe.recipe_details.item.category')
+        $order = Order::with('customer', 'user', 'order_details', 'order_details.item.category')
             ->findOrFail($id);
-
+        Log::info($order);
         return view('orders.show', [
             'order' => $order
         ]);
@@ -98,16 +100,16 @@ class OrderController extends Controller
 
     public function edit(string $id): View
     {
-        $order = Order::with('customer', 'user', 'order_details', 'order_details.recipe')->findOrFail($id);
-
+        $order = Order::with('customer', 'user', 'order_details', 'order_details.item')->findOrFail($id);
+        Log::info($order);
         return view('orders.edit', [
             'order' => $order,
         ]);
     }
 
-    public function print(string $id): View
+    public function print(Order $order): View
     {
-        $order = Order::with('customer', 'user', 'order_details.recipe.recipe_details.item.category')->findOrFail($id);
+        // $order = Order::with('customer', 'user', 'order_details.item.category')->findOrFail($id);
 
 
         $view = "orders.print.{$this->settings()->lang}";
@@ -187,11 +189,9 @@ class OrderController extends Controller
             }
         }
         foreach ($order->order_details as $detail) {
-            $recipe = $detail->recipe;
-            if ($recipe->track_stock) {
-                $recipe->in_stock += $detail->quantity;
-                $recipe->save();
-            }
+            $item = $detail->item;
+            $item->in_stock += $detail->quantity;
+            $item->save();
         }
         $order->delete();
         return Redirect::back()->with("success", __("Deleted"));
@@ -484,47 +484,44 @@ class OrderController extends Controller
 
         foreach ($cart as $cartItem) {
             $cartItem = (object)$cartItem;
-            $recipe = Recipe::with("recipe_details.item")->where('id', $cartItem->id)->first(); // check item if valid
-            // dd($recipe);
-            if ($recipe) {
+            $item = Item::where('id', $cartItem->id)->first(); // check item if valid
+            // if ($recipe) {
                 
-                $recipe_details = $recipe -> recipe_details;
-                $cost = 0;
-                $quantity = $cartItem->quantity > 0 ? $cartItem->quantity : 0; //prevent vegetive numbers
-                foreach($recipe_details as $recipe_detail) {
-                    $cost = $cost + $recipe_detail->quantity * $recipe_detail->item->cost;
-                    $recipe_detail->item->in_stock = $recipe_detail->item->in_stock - $recipe_detail->quantity * $quantity;
-                    // dd($recipe_detail->item);
-                    $recipe_detail->item->save();
-                }
+            //     $recipe_details = $recipe -> recipe_details;
+            //     $cost = 0;
+            //     $quantity = $cartItem->quantity > 0 ? $cartItem->quantity : 0; //prevent vegetive numbers
+            //     foreach($recipe_details as $recipe_detail) {
+            //         $cost = $cost + $recipe_detail->quantity * $recipe_detail->item->cost;
+            //         $recipe_detail->item->in_stock = $recipe_detail->item->in_stock - $recipe_detail->quantity * $quantity;
+            //         // dd($recipe_detail->item);
+            //         $recipe_detail->item->save();
+            //     }
                 
-                $itemPrice = $cartItem->price ?? 0;
-                $itemCost = $cost ?? 0;
-                $order_detail = new OrderDetail();
-                $order_detail->quantity = $quantity;
-                $order_detail->price = $itemPrice;
-                $order_detail->cost = $itemCost;
-                $order_detail->vat_type = $cartItem->vat_type;
-                $order_detail->tax_rate = $cartItem->tax_rate;
-                $order_detail->discount = $cartItem->discount;
-                $order_detail->total = $quantity * $itemPrice;
-                $order_detail->total_cost = $quantity * $itemCost;
-                $order_detail->recipe()->associate($recipe);
-                $order_detail->order()->associate($order);
-                $order_detail->save();
+            $itemCost = $cartItem->cost ?? 0;
+            $itemPrice = $itemCost;
+            $quantity = $cartItem->quantity > 0 ? $cartItem->quantity : 0;
+            $order_detail = new OrderDetail();
+            $order_detail->quantity = $quantity;
+            $order_detail->price = $itemPrice;
+            $order_detail->cost = $itemCost;
+            $order_detail->vat_type = $request->vat_type;
+            $order_detail->tax_rate = $request->tax_rate;
+            $order_detail->discount = $cartItem->discount;
+            $order_detail->total = $quantity * $itemPrice;
+            $order_detail->total_cost = $quantity * $itemCost;
+            $order_detail->item()->associate($item);
+            $order_detail->order()->associate($order);
+            $order_detail->save();
 
+            $item->in_stock -= $quantity;
+            $item->save();
 
-                if ($recipe->track_stock) {
-                    $recipe->in_stock -= $quantity;
-                    $recipe->save();
-                }
-
-            }
         }
+        // }
 
 
         return $this->jsonResponse([
-            'order' => Order::with('customer', 'order_details.recipe.recipe_details.item.category')->findOrFail($order->id),
+            'order' => Order::with('customer', 'order_details.item.category')->findOrFail($order->id),
             'barcode' => DNS1D::getBarcodeSVG($order->number, 'C128', 2, 30, 'black', false),
             'tenden' => $request->tender_amount
         ]);
