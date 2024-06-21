@@ -51,6 +51,7 @@ type State = {
     customerFloor: string | null;
     customerApartment: string | null;
     cart: ICartItem[];
+    deletedCart: ICartItem[];
     total: number;
     subtotal: number;
     tax: number | undefined;
@@ -82,6 +83,7 @@ class PointOfSaleEdit extends Component<Props, State> {
             showProducts: false,
             categoryName: null,
             cart: [],
+            deletedCart: [],
             customers: [],
             customer: undefined,
             customerName: null,
@@ -195,7 +197,7 @@ class PointOfSaleEdit extends Component<Props, State> {
     getCategories = (): void => {
         // console.log("ASDASD");
         httpService
-            .get(`categories/all`)
+            .get(`/categories/all`)
             .then((response: any) => {
                 console.log("categories", response.data.categories);
                 this.setState({categories: response.data.categories});    
@@ -206,7 +208,7 @@ class PointOfSaleEdit extends Component<Props, State> {
             });
     };
 
-    storeOrder = (): void => {
+    updateOrder = (): void => {
         if (this.state.cart.length == 0) {
             toast.error(t('No items has been added!', 'لم يتم إضافة اية اصناف!'));
             return;
@@ -220,9 +222,10 @@ class PointOfSaleEdit extends Component<Props, State> {
             _deliveryCharge = this.state.deliveryCharge || 0;
         }
         httpService
-            .post(`/order`, {
+            .post(`/orders/update/${this.state.orderId}`, {
                 customer: this.state.customer,
                 cart: this.state.cart,
+                deletedCart: this.state.deletedCart,
                 subtotal: this.state.subtotal,
                 total: this.state.total,
                 tax_rate: this.state.tax || 0,
@@ -232,15 +235,23 @@ class PointOfSaleEdit extends Component<Props, State> {
                 remarks: this.state.remarks,
                 type: this.state.orderType,
                 tender_amount: this.state.tenderAmount || 0,
-                paid: this.state.isPaid
+                paid: this.state.isPaid,
+                _method: 'PUT'
             })
             .then((response: any) => {
                 if (response.data) {
-                    this.resetPos();
-                    toast.info(t('Saved!', 'تم الحفظ'));
                     this.closeModal('checkoutModal');
-                    console.log(response.data);
-                    this.printInvoice(response.data, this.getAppSettings());
+                    Swal.fire({
+                        title: t('Updated', 'تم التحديث'),
+                        text: t('Invoice has been updated!', '"تم تحديث الفاتورة!"'),
+                        icon: 'success',
+                        allowOutsideClick: false,
+                        confirmButtonText: t('Continue', 'المتابعة')
+                    }).then(result => {
+                        if (result.isConfirmed) {
+                            window.location.href = `/orders/${this.state.orderId}`;
+                        }
+                    });
                 }
             })
             .finally(() => {
@@ -418,7 +429,10 @@ class PointOfSaleEdit extends Component<Props, State> {
     };
     removeItem = (item: ICartItem): void => {
         let newCartItems = this.state.cart.filter(i => i.cartId != item.cartId);
-        this.setState({ cart: newCartItems }, () => this.calculateTotal());
+        this.setState({ cart: newCartItems }, () => {
+            this.calculateTotal();
+            this.setState({ deletedCart: [item, ...this.state.deletedCart] });
+        });
     };
     addToCart = (recipe: ItemInterface): void => {
         let cartItem: ICartItem = {
@@ -679,140 +693,6 @@ class PointOfSaleEdit extends Component<Props, State> {
     };
     handleCustomerApartmentChange = (event: React.FormEvent<HTMLInputElement>): void => {
         this.setState({ customerApartment: event.currentTarget.value });
-    };
-
-    printInvoice = (data: any, settings: any): void => {
-        var receipt = window.open(``, 'PRINT', 'height=600,width=300');
-        var order = data.order;
-        if (!receipt) return;
-        receipt.document.write(`<html lang="${settings.lang}" dir="${settings.dir}"><head><title>Order Receipt ${order.number}</title><style>`);
-        receipt.document.write(`@page { size: auto;  margin: 0mm; }`);
-        receipt.document.write(`.table1 { border-collapse: collapse; }`);
-        receipt.document.write(`.table1>tbody:before{ content: "-"; display: block; line-height: 10px; color: transparent; }`);
-        receipt.document.write(`tr { min-height: 50px; }`);
-        receipt.document.write(`.table1>tbody>tr>td { border: 1px solid black; text-align: center; font-size: 1.2rem; padding: 5px; }`);
-        receipt.document.write(`.table2 { border-collapse: collapse; margin-bottom: 15px; }`);
-        receipt.document.write(`.table2>tbody>tr>td { border: 1px solid black; font-size: 1.5rem; width: 200px; padding: 5px;  }`);
-        receipt.document.write(`</style></head><body>`);
-
-        receipt.document.write(`<div style="margin: 30px; margin-top: 30px;">`);
-        receipt.document.write(`<div style="margin-top: 1rem; margin-bottom: 0.2rem;text-align: center !important;">`);
-        if (settings.storeName) {
-            receipt.document.write(`<div style="padding-right: 1rem;padding-left: 1rem;margin-bottom: 1rem"><div style="logo-container">${settings.logo}</div></div>`);
-        } else {
-            if (settings.storeName) {
-                receipt.document.write(`<div style="font-size: 1.50rem;">${settings.storeName}</div>`);
-            }
-        }
-        receipt.document.write(`<div style="font-size: 2.00rem;">SALE INVOICE</div>`);
-        receipt.document.write(`<div style="font-size: 1.00rem;">${order.number}</div>`);
-        receipt.document.write(`<div style="font-size: 1.50rem; display: flex; justify-content: flex-end; gap: 20px;">`);
-        receipt.document.write(`<div>DATE : </div><div>${order.date_view}</div></div>`);
-        if(order.customer_id) {
-            receipt.document.write(`<div style="font-size: 1.50rem; display: flex; justify-content: space-between; gap: 30px;">`);
-
-            receipt.document.write(`<div style="display: flex; gap: 20px;">`);
-            receipt.document.write(`<div>Client : </div>`);
-            receipt.document.write(`<div>${order.customer.name}</div>`);
-            receipt.document.write(`</div>`);
-
-            if(settings.currentSymbol)
-                receipt.document.write(`<div>${settings.currentSymbol}</div>`);
-
-            receipt.document.write(`</div>`);
-        }
-
-        receipt.document.write(`<div style="font-size: 1.50rem; display: flex; gap: 20px;">`);
-        receipt.document.write(`<div>Address : </div>`);
-        if (settings.storeAddress) {
-            receipt.document.write(`<div style="font-size: 1.50rem;">${settings.storeAddress}</div>`);
-        }
-        receipt.document.write(`</div>`);
-        receipt.document.write(`</div>`);
-
-        receipt.document.write('<div style="margin-top: 20px;">');
-        receipt.document.write('<table style="width: 100%;" class="table1">');
-        receipt.document.write('<thead><tr>');
-        receipt.document.write('<th style="font-size: 1.50rem; border: none;">');
-        receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">Name</div>');
-        receipt.document.write('</th>');
-        receipt.document.write('<th style="font-size: 1.50rem; border: none;">');
-        receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">Qty</div>');
-        receipt.document.write('</th>');
-        receipt.document.write('<th style="font-size: 1.50rem; border: none;">');
-        receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">U cost</div>');
-        receipt.document.write('</th>');
-        receipt.document.write('<th style="font-size: 1.50rem; border: none;">');
-        receipt.document.write('<div style="border: 2px solid black; display: flex; height: 40px; align-items: center; justify-content: center;margin: 2px;">Total</div>');
-        receipt.document.write('</th>');
-        receipt.document.write('</tr></thead>');
-
-        receipt.document.write('<tbody>');
-        order.order_details.map((detail: any) => {
-            if (receipt) {
-                receipt.document.write(`<tr>`);
-                receipt.document.write(`<td>${detail.item.name}</td>`);
-                receipt.document.write(`<td>${detail.quantity}</td>`);
-                receipt.document.write(`<td>${this.currencyFormatValue(detail.cost)}</td>`);
-                receipt.document.write(`<td>${this.currencyFormatValue(detail.total)}</td>`);
-                receipt.document.write(`</tr>`);
-            }
-        });
-        receipt.document.write(`<tr>`);
-        receipt.document.write(`<td colspan="4">`);
-        receipt.document.write(`<div style="float: right;">`);
-        
-        receipt.document.write(`<table class="table2" style="margin-top: 30px;">`);
-        receipt.document.write(`<tbody>`);
-        receipt.document.write(`<tr>`);
-        receipt.document.write(`<td>Total</td>`);
-        receipt.document.write(`<td>${this.currencyFormatValue(order.subtotal)}</td>`);
-        receipt.document.write(`</tr>`);
-        receipt.document.write(`</tbody>`);
-        receipt.document.write(`</table>`);
-        
-        receipt.document.write(`<table class="table2" style="margin-top: 30px;">`);
-        receipt.document.write(`<tbody>`);
-        receipt.document.write(`<tr>`);
-        receipt.document.write(`<td>Disc %</td>`);
-        receipt.document.write(`<td>${order.discount * 100}</td>`);
-        receipt.document.write(`</tr>`);
-        receipt.document.write(`</tbody>`);
-        receipt.document.write(`</table>`);
-        
-        receipt.document.write(`<table class="table2" style="margin-top: 30px;">`);
-        receipt.document.write(`<tbody>`);
-        receipt.document.write(`<tr>`);
-        receipt.document.write(`<td>Disc</td>`);
-        receipt.document.write(`<td>${this.currencyFormatValue(order.discount * order.subtotal)}</td>`);
-        receipt.document.write(`</tr>`);
-        receipt.document.write(`</tbody>`);
-        receipt.document.write(`</table>`);
-        
-        receipt.document.write(`<table class="table2" style="margin-top: 30px;">`);
-        receipt.document.write(`<tbody>`);
-        receipt.document.write(`<tr>`);
-        receipt.document.write(`<td>Total After Discount</td>`);
-        receipt.document.write(`<td>`);
-        receipt.document.write(`<div>${this.currencyFormatValue(order.total)}</div>`);
-        receipt.document.write(`<div>${order.receipt_exchange_rate}</div>`);
-        receipt.document.write(`</td>`);
-        receipt.document.write(`</tr>`);
-        receipt.document.write(`</tbody>`);
-        receipt.document.write(`</table>`);
-        receipt.document.write(`</div></td></tr>`);
-
-        receipt.document.write(`<tr><td colspan="4" style="height: 50px;">0/100 , شكرا ألفرو</td></tr>`);
-        receipt.document.write(`<tr><td colspan="4" style="height: 50px;"></td></tr>`);
-        receipt.document.write(`<tr><td colspan="4" style="height: 50px;"></td></tr>`);
-        receipt.document.write(`</tbody></table></div></div>`);
-        receipt.document.write(`</body>`);
-        receipt.document.write(`</html>`);
-
-        receipt.document.close();
-        receipt.focus();
-        receipt.print();
-        receipt.close();
     };
 
     modalCloseButton = (): React.ReactNode => {
@@ -1103,9 +983,9 @@ class PointOfSaleEdit extends Component<Props, State> {
                                 className="btn btn-success py-4 rounded-0 shadow-sm fs-3 btn-lg w-100"
                                 data-bs-toggle="modal"
                                 data-bs-target="#checkoutModal">
-                                {t('CHECKOUT', 'الدفع')}
+                                {t(' UPDATED CHECKOUT', 'تحديث')}
                             </button>
-                            {/* <button type="button" className="btn btn-success py-4 rounded-0 shadow-sm fs-3 btn-lg w-100" onClick={e => this.storeOrder()}>
+                            {/* <button type="button" className="btn btn-success py-4 rounded-0 shadow-sm fs-3 btn-lg w-100" onClick={e => this.updateOrder()}>
                                 الدفع
                             </button> */}
                         </div>
@@ -1602,8 +1482,8 @@ class PointOfSaleEdit extends Component<Props, State> {
                                             <button
                                                 className="btn btn-primary btn-lg py-3 w-100"
                                                 disabled={this.state.isLoading}
-                                                onClick={e => this.storeOrder()}>
-                                                {t('SUBMIT', 'حفظ')}
+                                                onClick={e => this.updateOrder()}>
+                                                {t('UPDATE', 'تحديث')}
                                             </button>
                                         </div>
                                     </div>
@@ -1619,7 +1499,7 @@ class PointOfSaleEdit extends Component<Props, State> {
 }
 export default PointOfSaleEdit;
 
-const element = document.getElementById('pos');
+const element = document.getElementById('pos-edit');
 if (element) {
     const props = Object.assign({}, element.dataset);
     const root = ReactDOM.createRoot(element);

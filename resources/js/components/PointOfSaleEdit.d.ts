@@ -37,6 +37,7 @@ type State = {
     customerFloor: string | null;
     customerApartment: string | null;
     cart: ICartItem[];
+    deletedCart: ICartItem[];
     total: number;
     subtotal: number;
     tax: number | undefined;
@@ -62,7 +63,7 @@ declare class PointOfSaleEdit extends Component<Props, State> {
     backClick: () => void;
     specialCustomercost: (prod: ItemInterface) => number;
     getCategories: () => void;
-    storeOrder: () => void;
+    updateOrder: () => void;
     reset: () => void;
     resetPos: () => void;
     handleDiscountChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -109,7 +110,6 @@ declare class PointOfSaleEdit extends Component<Props, State> {
     handleCustomerBuildingChange: (event: React.FormEvent<HTMLInputElement>) => void;
     handleCustomerFloorChange: (event: React.FormEvent<HTMLInputElement>) => void;
     handleCustomerApartmentChange: (event: React.FormEvent<HTMLInputElement>) => void;
-    printInvoice: (data: any, settings: any) => void;
     modalCloseButton: () => React.ReactNode;
     modalCloseButtonWhite: () => React.ReactNode;
     handleOrderTypeChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;

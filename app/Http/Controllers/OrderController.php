@@ -282,7 +282,7 @@ class OrderController extends Controller
         $total = $request->total;
 
         $cart = (object) $request->cart;
-        $deletedItems = (object) $request->deletedItems;
+        $deletedItems = (object) $request->deletedCart;
         $order->subtotal = $request->subtotal;
         $order->delivery_charge = $request->delivery_charge;
         $order->discount = $request->discount;
@@ -340,66 +340,45 @@ class OrderController extends Controller
 
 
         // Updating ingredients
-        $order_details = Order::with('order_details.recipe.recipe_details')->where('id', $order->id)->first()->order_details;
+        $order_details = Order::with('order_details.item')->where('id', $order->id)->first()->order_details;
+        Log::info($order_details);
         foreach($order_details as $order_detail) {
-            $recipe_details = $order_detail->recipe->recipe_details;
-            foreach($recipe_details as $recipe_detail) {
-                $recipe_detail->item->in_stock = $recipe_detail->item->in_stock + $recipe_detail->quantity * $order_detail->quantity;
-                $recipe_detail->item->save();
-            }
+            $item = $order_detail->item;
+            $item->in_stock = $item->in_stock + $order_detail->quantity;
+            $item->save();
         }
         $order->order_details()->delete();
         // Until here
 
         foreach ($cart as $cartItem) {
             $cartItem = (object)$cartItem;
-            $recipe = Recipe::with("recipe_details.item")->where('id', $cartItem->id)->first(); // check item if valid
-            if ($recipe) {
-                
-                $recipe_details = $recipe -> recipe_details;
-                $cost = 0;
-                $quantity = $cartItem->quantity > 0 ? $cartItem->quantity : 0; //prevent vegetive numbers
-                foreach($recipe_details as $recipe_detail) {
-                    $cost = $cost + $recipe_detail->quantity * $recipe_detail->item->cost;
-                    $recipe_detail->item->in_stock = $recipe_detail->item->in_stock - $recipe_detail->quantity * $quantity;
-                    $recipe_detail->item->save();
-                }
-                
-                $oldQuantity = $cartItem->old_quantity ?? 0;
-                $itemPrice = $cartItem->price ?? 0;
-                $itemCost = $recipe->cost ?? 0;
-                $order_detail = new OrderDetail();
-                $order_detail->quantity = $quantity;
-                $order_detail->price = $itemPrice;
-                $order_detail->cost = $itemCost;
-                $order_detail->vat_type = $cartItem->vat_type;
-                $order_detail->tax_rate = $cartItem->tax_rate;
-                $order_detail->discount = $cartItem->discount;
-                $order_detail->created_at = $order->created_at;
-                $order_detail->total = $quantity * $itemPrice;
-                $order_detail->total_cost = $quantity * $itemCost;
-                $order_detail->recipe()->associate($recipe);
-                $order_detail->order()->associate($order);
-                $order_detail->save();
+            $item = Item::where('id', $cartItem->id)->first(); // check item if valid
+            $itemCost = $cartItem->cost ?? 0;
+            $itemPrice = $itemCost;
+            $quantity = $cartItem->quantity > 0 ? $cartItem->quantity : 0;
+            $order_detail = new OrderDetail();
+            $order_detail->quantity = $quantity;
+            $order_detail->price = $itemPrice;
+            $order_detail->cost = $itemCost;
+            $order_detail->vat_type = $request->vat_type;
+            $order_detail->tax_rate = $request->tax_rate;
+            $order_detail->discount = $cartItem->discount;
+            $order_detail->total = $quantity * $itemPrice;
+            $order_detail->total_cost = $quantity * $itemCost;
+            $order_detail->item()->associate($item);
+            $order_detail->order()->associate($order);
+            $order_detail->save();
 
-                if ($recipe->track_stock) {
-                    $currentInStock =  $recipe->in_stock;
-                    $recipe->in_stock = $currentInStock + $oldQuantity - $quantity;
-                    $recipe->save();
-                }
-
-                $order_detail->recipe()->associate($recipe);
-                $order_detail->order()->associate($order);
-                $order_detail->save();
-            }
+            $item->in_stock -= $quantity;
+            $item->save();
         }
 
         foreach ($deletedItems as $deletedItem) {
             $deletedItem = (object)$deletedItem;
-            $recipe = Recipe::where('id', $deletedItem->id)->first(); // check item if valid
-            if ($recipe) {
-                $recipe->in_stock += $deletedItem->old_quantity;
-                $recipe->save();
+            $item = Item::where('id', $deletedItem->id)->first(); // check item if valid
+            if ($item) {
+                $item->in_stock += $deletedItem->old_quantity;
+                $item->save();
             }
         }
         return $this->jsonResponse();
