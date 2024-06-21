@@ -135,7 +135,9 @@ class RecipeCreate extends Component<Props, State> {
         httpService
             .get(`/categories/all`)
             .then((response: any) => {
-                this.setState({ categories: response.data });
+                this.setState({ categories: response.data.categories });
+                console.log(response.data.categories);
+                
             });
     };
 
@@ -144,6 +146,7 @@ class RecipeCreate extends Component<Props, State> {
             .get(`/items/all`)
             .then((response: any) => {
                 this.setState({ items: response.data });
+                console.log(response.data);
             })
             .finally(() => {
                 this.setState({ isLoading: false });

@@ -158,7 +158,7 @@ class RecipeEdit extends Component<Props, State> {
         httpService
             .get(`/categories/all`)
             .then((response: any) => {
-                this.setState({ categories: response.data });
+                this.setState({ categories: response.data.categories });
             });
     };
 
